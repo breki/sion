@@ -1,9 +1,11 @@
 mod dem_tile;
-mod bitmap;
+mod mono_bitmap;
+mod grayscale_bitmap;
 
 fn main() {
     println!("Hello, world!");
 }
 
 
-// todo 5: define a struct for for the image
+// todo 5: implement png writing from a buffer - we need two versions, one
+//    for grayscale and one for 1-bit bitmaps

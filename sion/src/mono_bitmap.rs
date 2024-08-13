@@ -1,6 +1,6 @@
-/// Represents a bitmap that can be used to draw on and then sent to the
-/// display.
-struct Bitmap {
+/// Represents a monochrome bitmap that can be used to draw on and then
+/// be sent to the display.
+struct MonoBitmap {
     width: u16,
     height: u16,
     data: Box<[u8]>,
@@ -9,12 +9,12 @@ struct Bitmap {
 }
 
 
-impl Bitmap {
-    /// Creates a new empty bitmap with the given width and height.
-    fn new(width: u16, height: u16) -> Bitmap {
+impl MonoBitmap {
+    /// Creates a new empty monochrome bitmap with the given width and height.
+    fn new(width: u16, height: u16) -> MonoBitmap {
         let width_bytes = (width + 7) / 8;
 
-        Bitmap {
+        MonoBitmap {
             width,
             height,
             data: vec![0; (width_bytes * height) as usize].into_boxed_slice(),
@@ -47,12 +47,12 @@ impl Bitmap {
 
 #[cfg(test)]
 mod tests {
-    use super::Bitmap;
+    use super::MonoBitmap;
 
     /// A new bitmap is created with the correct dimensions and properties.
     #[test]
     fn create_bitmap() {
-        let bitmap = Bitmap::new(10, 15);
+        let bitmap = MonoBitmap::new(10, 15);
         assert_eq!(bitmap.width, 10);
         assert_eq!(bitmap.height, 15);
         assert_eq!(bitmap.width_bytes, 2);
@@ -62,7 +62,7 @@ mod tests {
     /// The pixels are off by default when the bitmap is created.
     #[test]
     fn pixels_are_off_by_default() {
-        let bitmap = Bitmap::new(10, 15);
+        let bitmap = MonoBitmap::new(10, 15);
         assert_eq!(bitmap.get_pixel(0, 0), false);
         assert_eq!(bitmap.get_pixel(4, 5), false);
     }
@@ -70,7 +70,7 @@ mod tests {
     /// Pixels can be set/reset and then retrieved.
     #[test]
     fn set_and_get_pixel() {
-        let mut bitmap = Bitmap::new(10, 15);
+        let mut bitmap = MonoBitmap::new(10, 15);
         bitmap.set_pixel(3, 4, true);
         assert_eq!(bitmap.get_pixel(3, 4), true);
         bitmap.set_pixel(3, 4, false);
