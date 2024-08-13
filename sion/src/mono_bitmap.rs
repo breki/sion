@@ -1,3 +1,5 @@
+use image::{GrayImage, Luma};
+
 /// Represents a monochrome bitmap that can be used to draw on and then
 /// be sent to the display.
 struct MonoBitmap {
@@ -43,6 +45,22 @@ impl MonoBitmap {
 
         self.data[byte_index] & mask != 0
     }
+
+    /// Writes the monochrome bitmap to a PNG file.
+    ///
+    /// # Arguments
+    ///
+    /// * `file_path` - The path to the output PNG file.
+    pub fn write_to_png(&self, file_path: &str) -> Result<(), image::ImageError> {
+        let mut img = GrayImage::new(self.width.into(), self.height.into());
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let pixel_value = if self.get_pixel(x, y) { 255 } else { 0 };
+                img.put_pixel(x.into(), y.into(), Luma([pixel_value]));
+            }
+        }
+        img.save(file_path)
+    }
 }
 
 #[cfg(test)]
@@ -75,5 +93,19 @@ mod tests {
         assert_eq!(bitmap.get_pixel(3, 4), true);
         bitmap.set_pixel(3, 4, false);
         assert_eq!(bitmap.get_pixel(3, 4), false);
+    }
+
+    /// The bitmap can be written to a PNG file.
+    #[test]
+    fn write_to_png() {
+        let width = 100;
+        let height = 150;
+        let mut bitmap = MonoBitmap::new(width, height);
+        for y in 0..height {
+            for x in 0..width {
+                bitmap.set_pixel(x, y, (x + y) % 2 == 0);
+            }
+        }
+        bitmap.write_to_png("target/debug/test-mono.png").unwrap();
     }
 }
