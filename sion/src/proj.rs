@@ -21,7 +21,6 @@ pub fn web_mercator_proj(lon: f32, lat: f32, proj_scale_factor: f32) -> (f32, f3
     (x, y)
 }
 
-// tests
 #[cfg(test)]
 mod tests {
     use crate::proj::{deg_to_rad, DPI, EARTH_RADIUS_METERS, INCHES_PER_METER};
