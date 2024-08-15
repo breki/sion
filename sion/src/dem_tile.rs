@@ -2,13 +2,13 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::os::windows::fs::MetadataExt;
 
-struct DemTile {
-    size: u16,
+pub struct DemTile {
+    pub size: u16,
     data: Box<[u8]>,
 }
 
 impl DemTile {
-    fn new(size: u16, data: Vec<u8>) -> DemTile {
+    pub fn new(size: u16, data: Vec<u8>) -> DemTile {
         DemTile {
             size,
             data: data.into_boxed_slice(),
@@ -16,7 +16,7 @@ impl DemTile {
     }
 
     // create a static constructor that reads the data from a file
-    fn from_file(file: &str) -> DemTile {
+    pub fn from_file(file: &str) -> DemTile {
         let file = File::open(file);
         match file {
             Ok(file) => {
@@ -47,7 +47,7 @@ impl DemTile {
     }
 
 
-    fn height_at(&self, x: u16, y: u16) -> i16 {
+    pub fn height_at(&self, x: u16, y: u16) -> i16 {
         let index = ((y as usize) * (self.size as usize) + (x as usize)) << 1;
         (self.data[index] as i16) << 8 | (self.data[index + 1] as i16)
     }

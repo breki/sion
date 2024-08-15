@@ -2,7 +2,7 @@ use image::{GrayImage, Luma};
 
 /// Represents a monochrome bitmap that can be used to draw on and then
 /// be sent to the display.
-struct MonoBitmap {
+pub struct MonoBitmap {
     width: u16,
     height: u16,
     data: Box<[u8]>,

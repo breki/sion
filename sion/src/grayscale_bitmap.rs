@@ -2,7 +2,7 @@ use image::{GrayImage, Luma};
 
 /// Represents a 8-bit grayscale bitmap that can be used to draw on and then
 /// be sent to the display.
-struct GrayscaleBitmap {
+pub struct GrayscaleBitmap {
     width: u16,
     height: u16,
     data: Box<[u8]>,
