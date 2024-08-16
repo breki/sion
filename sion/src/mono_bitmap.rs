@@ -3,8 +3,8 @@ use image::{GrayImage, Luma};
 /// Represents a monochrome bitmap that can be used to draw on and then
 /// be sent to the display.
 pub struct MonoBitmap {
-    width: u16,
-    height: u16,
+    pub width: u16,
+    pub height: u16,
     data: Box<[u8]>,
     /// The number of bytes per row in the bitmap.
     width_bytes: u16,
@@ -19,7 +19,7 @@ impl MonoBitmap {
         MonoBitmap {
             width,
             height,
-            data: vec![0; (width_bytes * height) as usize].into_boxed_slice(),
+            data: vec![0; width_bytes as usize * height as usize].into_boxed_slice(),
             width_bytes,
         }
     }
@@ -66,6 +66,14 @@ impl MonoBitmap {
 #[cfg(test)]
 mod tests {
     use super::MonoBitmap;
+
+    #[test]
+    fn create_large_bitmap() {
+        let bitmap = MonoBitmap::new(1000, 1000);
+        assert_eq!(bitmap.width, 1000);
+        assert_eq!(bitmap.height, 1000);
+        assert_eq!(bitmap.data.len(), 125000);
+    }
 
     /// A new bitmap is created with the correct dimensions and properties.
     #[test]

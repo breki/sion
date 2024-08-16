@@ -3,8 +3,8 @@ use image::{GrayImage, Luma};
 /// Represents a 8-bit grayscale bitmap that can be used to draw on and then
 /// be sent to the display.
 pub struct GrayscaleBitmap {
-    width: u16,
-    height: u16,
+    pub width: u16,
+    pub height: u16,
     data: Box<[u8]>,
 }
 
@@ -15,7 +15,7 @@ impl GrayscaleBitmap {
         GrayscaleBitmap {
             width,
             height,
-            data: vec![0; (width * height) as usize].into_boxed_slice(),
+            data: vec![0; width as usize * height as usize].into_boxed_slice(),
         }
     }
 
@@ -51,6 +51,14 @@ impl GrayscaleBitmap {
 #[cfg(test)]
 mod tests {
     use super::GrayscaleBitmap;
+
+    #[test]
+    fn create_large_bitmap() {
+        let bitmap = GrayscaleBitmap::new(1000, 1000);
+        assert_eq!(bitmap.width, 1000);
+        assert_eq!(bitmap.height, 1000);
+        assert_eq!(bitmap.data.len(), 1000 * 1000);
+    }
 
     /// A new bitmap is created with the correct dimensions and properties.
     #[test]
