@@ -1,9 +1,9 @@
 use crate::consts::EARTH_CIRCUMFERENCE_METERS;
 use crate::dem_tile::DemTile;
-use crate::geo::normalize_angle;
+use crate::geo::{difference_between_angles, normalize_angle};
 use crate::grayscale_bitmap::GrayscaleBitmap;
 use crate::trig::deg_to_rad;
-use std::f32::consts::FRAC_PI_2;
+use std::f32::consts::{FRAC_PI_2, PI};
 
 #[allow(dead_code)]
 pub struct HillshadingParameters {
@@ -68,19 +68,21 @@ pub fn calculate_pq(
 pub fn calculate_slope_and_aspect(p: f32, q: f32) -> (f32, f32) {
     let max_slope = (p * p + q * q).sqrt();
     let slope = max_slope.atan();
-    let aspect = normalize_angle(FRAC_PI_2 * 3.0 - q.atan2(p));
+    let aspect = normalize_angle(q.atan2(p) - FRAC_PI_2);
 
     (slope, aspect)
 }
 
 pub fn hillshade(
     dem: &DemTile,
-    _parameters: &HillshadingParameters,
+    parameters: &HillshadingParameters,
     bitmap: &mut GrayscaleBitmap,
 ) {
     if bitmap.width != dem.size || bitmap.height != dem.size {
         panic!("bitmap size does not match DEM size");
     }
+
+    let sun_azimuth = deg_to_rad(parameters.sun_azimuth);
 
     // Calculate the (approximate) horizontal and vertical grid
     // spacing (in meters). Note that for latitude, we add 0.5 degrees
@@ -98,7 +100,7 @@ pub fn hillshade(
 
     for y in 1..dem.size - 1 {
         for x in 1..dem.size - 1 {
-            let (_p, _q) = calculate_pq(
+            let (p, q) = calculate_pq(
                 dem,
                 x,
                 y,
@@ -106,7 +108,17 @@ pub fn hillshade(
                 vertical_spacing_mul8,
             );
 
-            let (_slope, _aspect) = calculate_slope_and_aspect(_p, _q);
+            let (slope, aspect) = calculate_slope_and_aspect(p, q);
+
+            let aspect_diff = difference_between_angles(aspect, sun_azimuth);
+            let aspect_darkness = aspect_diff / PI;
+            let slope_darkness = slope / FRAC_PI_2;
+            let darkness = 1.
+                - (slope_darkness * aspect_darkness * parameters.intensity)
+                    .min(1.);
+            let darkness_shade = (255.0 * darkness) as u8;
+
+            bitmap.set_pixel(x, y, darkness_shade);
         }
     }
 }
@@ -123,5 +135,9 @@ mod tests {
         let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
         let parameters = HillshadingParameters::default();
         hillshade(&dem, &parameters, &mut bitmap);
+
+        bitmap
+            .write_to_png("target/debug/igor_hillshading.png")
+            .unwrap()
     }
 }

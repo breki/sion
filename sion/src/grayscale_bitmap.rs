@@ -8,7 +8,6 @@ pub struct GrayscaleBitmap {
     data: Box<[u8]>,
 }
 
-
 impl GrayscaleBitmap {
     /// Creates a new empty grayscale bitmap with the given width and height.
     pub fn new(width: u16, height: u16) -> GrayscaleBitmap {
@@ -19,16 +18,16 @@ impl GrayscaleBitmap {
         }
     }
 
-    /// Sets the pixel at the given coordinates to the given value (on or off).
-    pub fn set_pixel(&mut self, x: u16, y: u16, value: u8) {
-        let index = (y * self.width + x) as usize;
-        self.data[index] = value;
-    }
-
     /// Gets the value of the pixel at the given coordinates.
     pub fn get_pixel(&self, x: u16, y: u16) -> u8 {
-        let index = (y * self.width + x) as usize;
+        let index = (y as usize * self.width as usize + x as usize) as usize;
         self.data[index]
+    }
+
+    /// Sets the pixel at the given coordinates to the given value (on or off).
+    pub fn set_pixel(&mut self, x: u16, y: u16, value: u8) {
+        let index = (y as usize * self.width as usize + x as usize) as usize;
+        self.data[index] = value;
     }
 
     /// Writes the grayscale bitmap to a PNG file.
@@ -36,7 +35,10 @@ impl GrayscaleBitmap {
     /// # Arguments
     ///
     /// * `file_path` - The path to the output PNG file.
-    pub fn write_to_png(&self, file_path: &str) -> Result<(), image::ImageError> {
+    pub fn write_to_png(
+        &self,
+        file_path: &str,
+    ) -> Result<(), image::ImageError> {
         let mut img = GrayImage::new(self.width.into(), self.height.into());
         for y in 0..self.height {
             for x in 0..self.width {
@@ -98,6 +100,8 @@ mod tests {
                 bitmap.set_pixel(x, y, ((x + y) * 5) as u8);
             }
         }
-        bitmap.write_to_png("target/debug/test-grayscale.png").unwrap();
+        bitmap
+            .write_to_png("target/debug/test-grayscale.png")
+            .unwrap();
     }
 }

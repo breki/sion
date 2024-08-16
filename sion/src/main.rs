@@ -1,15 +1,16 @@
 #![deny(warnings)]
 
+mod consts;
 mod dem_tile;
-mod mono_bitmap;
+mod errors;
+mod geo;
 mod grayscale_bitmap;
 mod igor_hillshading;
+mod mono_bitmap;
 mod proj;
-mod consts;
-mod trig;
 mod slopes;
-mod geo;
-mod errors;
+mod testing;
+mod trig;
 
 fn main() {
     println!("Hello, world!");
