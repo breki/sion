@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod dem_tile;
 mod mono_bitmap;
 mod grayscale_bitmap;

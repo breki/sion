@@ -1,9 +1,10 @@
 use crate::grayscale_bitmap::GrayscaleBitmap;
 use crate::dem_tile::DemTile;
 
+#[allow(dead_code)]
 pub struct HillshadingParameters {
-    sun_azimuth: f32,
-    intensity: f32,
+    pub sun_azimuth: f32,
+    pub intensity: f32,
 }
 
 impl Default for HillshadingParameters {
@@ -16,6 +17,7 @@ impl Default for HillshadingParameters {
 }
 
 impl HillshadingParameters {
+    #[allow(dead_code)]
     fn new(sun_azimuth: f32, intensity: f32) -> Self {
         Self {
             sun_azimuth,
@@ -32,10 +34,10 @@ pub fn hillshade(
         panic!("bitmap size does not match DEM size");
     }
 
-    let horizontal_grid_spacing_meters = 1.0;
+    let _horizontal_grid_spacing_meters = 1.0;
 
-    for y in 1..dem.size - 1 {
-        for x in 1..dem.size - 1 {
+    for _y in 1..dem.size - 1 {
+        for _x in 1..dem.size - 1 {
             panic!("not implemented yet")
         }
     }
