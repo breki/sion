@@ -15,7 +15,7 @@ fn main() {
     println!("Hello, world!");
 }
 
-// todo 5: implement 1:1 hillshading of a DEM tile, as the first step towards a full
+// todo 10: implement 1:1 hillshading of a DEM tile, as the first step towards a full
 //  hillshading algorithm
 
 // todo 20: implement a first hillshading algorithm that reads an HGT file and

@@ -4,7 +4,6 @@ use std::os::windows::fs::MetadataExt;
 use std::path::Path;
 use crate::errors::SionError;
 
-// todo 0: we need longitude and latitude of the tile
 pub struct DemTile {
     pub lon: i16,
     pub lat: i16,
@@ -55,8 +54,13 @@ impl DemTile {
     }
 
     pub fn height_at(&self, x: u16, y: u16) -> i16 {
-        let index = ((y as usize) * (self.size as usize) + (x as usize)) << 1;
-        (self.data[index] as i16) << 8 | (self.data[index + 1] as i16)
+        let byte_offset = ((y as usize) * (self.size as usize) + (x as usize)) << 1;
+        (self.data[byte_offset] as i16) << 8 | (self.data[byte_offset + 1] as i16)
+    }
+
+    pub fn height_at_index(&self, index: usize) -> i16 {
+        let byte_offset = index << 1;
+        (self.data[byte_offset] as i16) << 8 | (self.data[byte_offset + 1] as i16)
     }
 
     pub fn parse_tile_name(tile_name: &str) -> Result<(i16, i16), SionError> {

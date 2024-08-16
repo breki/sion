@@ -1,3 +1,4 @@
+use std::f32::consts::{TAU};
 use crate::consts::EARTH_RADIUS_METERS;
 
 /// Calculates an approximate geodetic distance (in meters) between two points
@@ -12,4 +13,15 @@ pub fn geodetic_distance_approximate(lon1: f32, lat1: f32, lon2: f32, lat2: f32)
 
     let c = 2.0 * (a.sqrt() / (1.0 - a).sqrt()).atan();
     EARTH_RADIUS_METERS * c
+}
+
+
+pub fn normalize_angle(angle: f32) -> f32 {
+    let angle_remainder = angle % TAU;
+
+    if angle_remainder < 0.0 {
+        angle_remainder + TAU
+    } else {
+        angle_remainder
+    }
 }
