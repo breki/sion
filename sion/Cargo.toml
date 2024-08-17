@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.72.0"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "sion"
+
+[[bin]]
+name = "sion"
+path = "src/main.rs"
 
 [dependencies]
 byteorder = "1.5.0"
@@ -12,3 +17,8 @@ image = "0.25.2"
 
 [dev-dependencies]
 rstest = "0.22.0"
+criterion = "0.5.1"
+
+[[bench]]
+name = "benchmark"
+harness = false

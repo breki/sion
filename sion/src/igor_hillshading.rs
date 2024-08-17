@@ -64,7 +64,6 @@ pub fn calculate_pq(
     (p, q)
 }
 
-// todo 5: switch to f16?
 pub fn calculate_slope_and_aspect(p: f32, q: f32) -> (f32, f32) {
     let max_slope = (p * p + q * q).sqrt();
     let slope = max_slope.atan();

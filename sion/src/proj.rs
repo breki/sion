@@ -1,5 +1,4 @@
 use crate::consts::{DPI, EARTH_RADIUS_METERS, INCHES_PER_METER};
-use crate::trig::deg_to_rad;
 use std::f32::consts::FRAC_PI_4;
 
 pub const MIN_LAT: f32 = -1.48442222974533;
@@ -27,8 +26,9 @@ pub fn web_mercator_proj(
 
 #[cfg(test)]
 mod tests {
-    use crate::proj::{deg_to_rad, DPI, EARTH_RADIUS_METERS, INCHES_PER_METER};
+    use crate::consts::{DPI, EARTH_RADIUS_METERS, INCHES_PER_METER};
     use crate::testing::assert_eq_approx;
+    use crate::trig::deg_to_rad;
 
     #[test]
     fn mercator_projection() {
