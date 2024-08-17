@@ -1,4 +1,4 @@
-// #![deny(warnings)]
+#![deny(warnings)]
 
 pub mod consts;
 pub mod dem_tile;

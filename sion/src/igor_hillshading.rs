@@ -5,7 +5,6 @@ use crate::grayscale_bitmap::GrayscaleBitmap;
 use crate::trig::deg_to_rad;
 use std::f32::consts::{FRAC_PI_2, PI};
 
-#[allow(dead_code)]
 pub struct HillshadingParameters {
     pub sun_azimuth: f32,
     pub intensity: f32,

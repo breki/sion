@@ -10,21 +10,23 @@ pub struct MonoBitmap {
     width_bytes: u16,
 }
 
-
 impl MonoBitmap {
     /// Creates a new empty monochrome bitmap with the given width and height.
+    #[allow(dead_code)]
     fn new(width: u16, height: u16) -> MonoBitmap {
         let width_bytes = (width + 7) / 8;
 
         MonoBitmap {
             width,
             height,
-            data: vec![0; width_bytes as usize * height as usize].into_boxed_slice(),
+            data: vec![0; width_bytes as usize * height as usize]
+                .into_boxed_slice(),
             width_bytes,
         }
     }
 
     /// Sets the pixel at the given coordinates to the given value (on or off).
+    #[allow(dead_code)]
     fn set_pixel(&mut self, x: u16, y: u16, value: bool) {
         let byte_index = (y * self.width_bytes + x / 8) as usize;
         let bit_index = x % 8;
@@ -51,7 +53,10 @@ impl MonoBitmap {
     /// # Arguments
     ///
     /// * `file_path` - The path to the output PNG file.
-    pub fn write_to_png(&self, file_path: &str) -> Result<(), image::ImageError> {
+    pub fn write_to_png(
+        &self,
+        file_path: &str,
+    ) -> Result<(), image::ImageError> {
         let mut img = GrayImage::new(self.width.into(), self.height.into());
         for y in 0..self.height {
             for x in 0..self.width {
