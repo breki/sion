@@ -1,7 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sion::dem_tile::DemTile;
 use sion::grayscale_bitmap::GrayscaleBitmap;
-use sion::igor_hillshading::{hillshade, HillshadingParameters};
+use sion::hillshading::igor_hillshading::hillshade;
+use sion::hillshading::parameters::HillshadingParameters;
 
 fn benchmark_hillshade(c: &mut Criterion) {
     let dem = DemTile::from_file("tests/data/N46E006.hgt");

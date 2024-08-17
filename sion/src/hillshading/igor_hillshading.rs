@@ -2,32 +2,9 @@ use crate::consts::EARTH_CIRCUMFERENCE_METERS;
 use crate::dem_tile::DemTile;
 use crate::geo::{difference_between_angles, normalize_angle};
 use crate::grayscale_bitmap::GrayscaleBitmap;
+use crate::hillshading::parameters::HillshadingParameters;
 use crate::trig::deg_to_rad;
 use std::f32::consts::{FRAC_PI_2, PI};
-
-pub struct HillshadingParameters {
-    pub sun_azimuth: f32,
-    pub intensity: f32,
-}
-
-impl Default for HillshadingParameters {
-    fn default() -> Self {
-        Self {
-            sun_azimuth: 315.0,
-            intensity: 1.0,
-        }
-    }
-}
-
-impl HillshadingParameters {
-    #[allow(dead_code)]
-    fn new(sun_azimuth: f32, intensity: f32) -> Self {
-        Self {
-            sun_azimuth,
-            intensity,
-        }
-    }
-}
 
 pub fn calculate_pq(
     dem_tile: &DemTile,
