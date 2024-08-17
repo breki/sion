@@ -1,17 +1,34 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use sion::dem_tile::DemTile;
 use sion::grayscale_bitmap::GrayscaleBitmap;
-use sion::hillshading::igor_hillshading::hillshade;
+use sion::hillshading::igor_hillshading_new::hillshade as hillshade_new;
+use sion::hillshading::igor_hillshading_orig::hillshade as hillshade_orig;
 use sion::hillshading::parameters::HillshadingParameters;
 
-fn benchmark_hillshade(c: &mut Criterion) {
+fn benchmark_igor_hillshade_orig(c: &mut Criterion) {
     let dem = DemTile::from_file("tests/data/N46E006.hgt");
     let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
     let parameters = HillshadingParameters::default();
 
-    c.bench_function("hillshade", |b| {
+    c.bench_function("igor_hillshade_orig", |b| {
         b.iter(|| {
-            hillshade(
+            hillshade_orig(
+                black_box(&dem),
+                black_box(&parameters),
+                black_box(&mut bitmap),
+            )
+        })
+    });
+}
+
+fn benchmark_igor_hillshade_new(c: &mut Criterion) {
+    let dem = DemTile::from_file("tests/data/N46E006.hgt");
+    let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
+    let parameters = HillshadingParameters::default();
+
+    c.bench_function("igor_hillshade_new", |b| {
+        b.iter(|| {
+            hillshade_new(
                 black_box(&dem),
                 black_box(&parameters),
                 black_box(&mut bitmap),
@@ -27,7 +44,7 @@ fn criterion_config() -> Criterion {
 criterion_group! {
     name = benches;
     config = criterion_config();
-    targets = benchmark_hillshade
+    targets = benchmark_igor_hillshade_orig, benchmark_igor_hillshade_new
 }
 
 criterion_main!(benches);
