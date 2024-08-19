@@ -7,7 +7,7 @@ use sion::hillshading::parameters::HillshadingParameters;
 
 fn benchmark_igor_hillshade_orig(c: &mut Criterion) {
     let dem = DemTile::from_file("tests/data/N46E006.hgt");
-    let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
+    let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
     let parameters = HillshadingParameters::default();
 
     c.bench_function("igor_hillshade_orig", |b| {
@@ -23,7 +23,7 @@ fn benchmark_igor_hillshade_orig(c: &mut Criterion) {
 
 fn benchmark_igor_hillshade_new(c: &mut Criterion) {
     let dem = DemTile::from_file("tests/data/N46E006.hgt");
-    let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
+    let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
     let parameters = HillshadingParameters::default();
 
     c.bench_function("igor_hillshade_new", |b| {

@@ -20,13 +20,13 @@ impl GrayscaleBitmap {
 
     /// Gets the value of the pixel at the given coordinates.
     pub fn get_pixel(&self, x: u16, y: u16) -> u8 {
-        let index = (y as usize * self.width as usize + x as usize) as usize;
+        let index = y as usize * self.width as usize + x as usize;
         self.data[index]
     }
 
     /// Sets the pixel at the given coordinates to the given value (on or off).
-    pub fn set_pixel(&mut self, x: u16, y: u16, value: u8) {
-        let index = (y as usize * self.width as usize + x as usize) as usize;
+    pub fn set_pixel(&mut self, x: usize, y: usize, value: u8) {
+        let index = y * self.width as usize + x;
         self.data[index] = value;
     }
 
@@ -97,7 +97,7 @@ mod tests {
         let mut bitmap = GrayscaleBitmap::new(width, height);
         for y in 0..height {
             for x in 0..width {
-                bitmap.set_pixel(x, y, ((x + y) * 5) as u8);
+                bitmap.set_pixel(x as usize, y as usize, ((x + y) * 5) as u8);
             }
         }
         bitmap

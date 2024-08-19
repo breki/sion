@@ -4,5 +4,5 @@ fn main() {
     println!("Hello, world!");
 }
 
-// todo 20: implement a first hillshading algorithm that reads an HGT file and
-//   writes a grayscale PNG file
+// todo 50: profile the code (maybe using http://www.codersnotes.com/sleepy/
+//   or https://superluminal.eu/rust or VC Code (https://dev.to/jambochen/profiling-rust-with-vs-on-windows-3m4l))

@@ -8,14 +8,14 @@ use std::f32::consts::{FRAC_PI_2, PI};
 
 pub fn calculate_pq(
     dem_tile: &DemTile,
-    x: u16,
-    y: u16,
+    x: usize,
+    y: usize,
     horizontal_spacing_mul8: f32,
     vertical_spacing_mul8: f32,
 ) -> (f32, f32) {
-    let center_index = y as usize * dem_tile.size as usize + x as usize;
-    let top_center_index = center_index - dem_tile.size as usize;
-    let bottom_center_index = center_index + dem_tile.size as usize;
+    let center_index = y * dem_tile.size + x;
+    let top_center_index = center_index - dem_tile.size;
+    let bottom_center_index = center_index + dem_tile.size;
 
     let height_tl = dem_tile.height_at_index(top_center_index - 1) as f32;
     let height_bl = dem_tile.height_at_index(bottom_center_index - 1) as f32;
@@ -53,7 +53,7 @@ pub fn hillshade(
     parameters: &HillshadingParameters,
     bitmap: &mut GrayscaleBitmap,
 ) {
-    if bitmap.width != dem.size || bitmap.height != dem.size {
+    if bitmap.width as usize != dem.size || bitmap.height as usize != dem.size {
         panic!("bitmap size does not match DEM size");
     }
 
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn hillshade_of_whole_dem() {
         let dem = DemTile::from_file("tests/data/N46E006.hgt");
-        let mut bitmap = GrayscaleBitmap::new(dem.size, dem.size);
+        let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
         let parameters = HillshadingParameters::default();
         hillshade(&dem, &parameters, &mut bitmap);
 
