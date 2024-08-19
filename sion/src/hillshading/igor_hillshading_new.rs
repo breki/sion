@@ -10,33 +10,32 @@ pub fn calculate_pq(
     dem_tile: &DemTile,
     x: usize,
     y: usize,
-    horizontal_spacing_mul8: f32,
-    vertical_spacing_mul8: f32,
+    spacing_mul8: f32,
 ) -> (f32, f32) {
     let center_index = y * dem_tile.size + x;
     let top_center_index = center_index - dem_tile.size;
     let bottom_center_index = center_index + dem_tile.size;
 
-    let height_tl = dem_tile.height_at_index(top_center_index - 1) as f32;
-    let height_bl = dem_tile.height_at_index(bottom_center_index - 1) as f32;
-    let height_br = dem_tile.height_at_index(bottom_center_index + 1) as f32;
-    let height_tr = dem_tile.height_at_index(top_center_index + 1) as f32;
+    let height_tl = dem_tile.height_at_index(top_center_index - 1) as i32;
+    let height_bl = dem_tile.height_at_index(bottom_center_index - 1) as i32;
+    let height_br = dem_tile.height_at_index(bottom_center_index + 1) as i32;
+    let height_tr = dem_tile.height_at_index(top_center_index + 1) as i32;
 
     let p = ((height_br
-        + 2. * dem_tile.height_at_index(center_index + 1) as f32
+        + 2 * dem_tile.height_at_index(center_index + 1) as i32
         + height_tr)
         - (height_bl
-            + 2. * dem_tile.height_at_index(center_index - 1) as f32
-            + height_tl))
-        / horizontal_spacing_mul8;
+            + 2 * dem_tile.height_at_index(center_index - 1) as i32
+            + height_tl)) as f32
+        / spacing_mul8;
 
     let q = ((height_br
-        + 2. * dem_tile.height_at_index(bottom_center_index) as f32
+        + 2 * dem_tile.height_at_index(bottom_center_index) as i32
         + height_bl)
         - (height_tr
-            + 2. * dem_tile.height_at_index(top_center_index) as f32
-            + height_tl))
-        / vertical_spacing_mul8;
+            + 2 * dem_tile.height_at_index(top_center_index) as i32
+            + height_tl)) as f32
+        / spacing_mul8;
     (p, q)
 }
 
@@ -69,19 +68,9 @@ pub fn hillshade(
         / dem.size as f32;
     let horizontal_spacing_mul8 = 8.0 * horizontal_grid_spacing_meters;
 
-    let vertical_grid_spacing_meters =
-        EARTH_CIRCUMFERENCE_METERS / 360. / dem.size as f32;
-    let vertical_spacing_mul8 = 8.0 * vertical_grid_spacing_meters;
-
     for y in 1..dem.size - 1 {
         for x in 1..dem.size - 1 {
-            let (p, q) = calculate_pq(
-                dem,
-                x,
-                y,
-                horizontal_spacing_mul8,
-                vertical_spacing_mul8,
-            );
+            let (p, q) = calculate_pq(dem, x, y, horizontal_spacing_mul8);
 
             let (slope, aspect) = calculate_slope_and_aspect(p, q);
 
