@@ -1,4 +1,3 @@
-use crate::consts::EARTH_CIRCUMFERENCE_METERS;
 use crate::dem_tile::DemTile;
 use crate::geo::{difference_between_angles, normalize_angle};
 use crate::grayscale_bitmap::GrayscaleBitmap;
@@ -6,12 +5,7 @@ use crate::hillshading::parameters::HillshadingParameters;
 use crate::trig::deg_to_rad;
 use std::f32::consts::{FRAC_PI_2, PI};
 
-pub fn calculate_pq(
-    dem_tile: &DemTile,
-    x: usize,
-    y: usize,
-    spacing_mul8: f32,
-) -> (f32, f32) {
+pub fn calculate_pq(dem_tile: &DemTile, x: usize, y: usize) -> (f32, f32) {
     let center_index = y * dem_tile.size + x;
     let top_center_index = center_index - dem_tile.size;
     let bottom_center_index = center_index + dem_tile.size;
@@ -26,21 +20,19 @@ pub fn calculate_pq(
         + height_tr)
         - (height_bl
             + 2 * dem_tile.height_at_index(center_index - 1) as i32
-            + height_tl)) as f32
-        / spacing_mul8;
+            + height_tl)) as f32;
 
     let q = ((height_br
         + 2 * dem_tile.height_at_index(bottom_center_index) as i32
         + height_bl)
         - (height_tr
             + 2 * dem_tile.height_at_index(top_center_index) as i32
-            + height_tl)) as f32
-        / spacing_mul8;
+            + height_tl)) as f32;
     (p, q)
 }
 
 pub fn calculate_slope_and_aspect(p: f32, q: f32) -> (f32, f32) {
-    let max_slope = (p * p + q * q).sqrt();
+    let max_slope = (p * p + q * q).sqrt() / 240.;
     let slope = max_slope.atan();
     let aspect = normalize_angle(q.atan2(p) - FRAC_PI_2);
 
@@ -58,19 +50,9 @@ pub fn hillshade(
 
     let sun_azimuth = deg_to_rad(parameters.sun_azimuth);
 
-    // Calculate the (approximate) horizontal and vertical grid
-    // spacing (in meters). Note that for latitude, we add 0.5 degrees
-    // to the calculation so the spacing is calculated for the center
-    // of the DEM tile.
-    let horizontal_grid_spacing_meters = deg_to_rad(dem.lon as f32 + 0.5).cos()
-        * EARTH_CIRCUMFERENCE_METERS
-        / 360.
-        / dem.size as f32;
-    let horizontal_spacing_mul8 = 8.0 * horizontal_grid_spacing_meters;
-
     for y in 1..dem.size - 1 {
         for x in 1..dem.size - 1 {
-            let (p, q) = calculate_pq(dem, x, y, horizontal_spacing_mul8);
+            let (p, q) = calculate_pq(dem, x, y);
 
             let (slope, aspect) = calculate_slope_and_aspect(p, q);
 
