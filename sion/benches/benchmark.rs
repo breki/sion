@@ -44,7 +44,7 @@ fn criterion_config() -> Criterion {
 criterion_group! {
     name = benches;
     config = criterion_config();
-    targets = benchmark_igor_hillshade_orig, benchmark_igor_hillshade_opt1, benchmark_igor_hillshade_opt2
+    targets = benchmark_igor_hillshade_orig, benchmark_igor_hillshade_opt1
 }
 
 criterion_main!(benches);
