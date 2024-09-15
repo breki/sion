@@ -83,7 +83,7 @@ mod tests {
         hillshade(&dem, &parameters, &mut bitmap);
 
         bitmap
-            .write_to_png("target/debug/igor_hillshading_new.png")
+            .write_to_png("target/debug/igor_hillshading_opt1.png")
             .unwrap()
     }
 }
