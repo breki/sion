@@ -3,7 +3,12 @@ use crate::geo::normalize_angle;
 use crate::trig::rad_to_deg;
 use std::collections::HashMap;
 use std::f32::consts::FRAC_PI_2;
+use std::fs::File;
 use std::io::Write;
+
+// todo 0: instead of using DEM data to fetch the slope and aspect values,
+//    simply generate ones for a given lookup table resolution - use the other
+//    way around - from the degree value to the original value?
 
 pub fn calculate_pq(dem_tile: &DemTile, x: usize, y: usize) -> (i32, i32) {
     let center_index = y * dem_tile.size + x;
@@ -44,10 +49,10 @@ pub fn calculate_slope_and_aspect(p: i32, q: i32) -> (f32, f32) {
 
 pub fn construct_lookup_tables(
     dem: &DemTile,
-    aspect_resolution: i32,
-) -> (HashMap<i32, i16>, HashMap<i32, i8>) {
+    resolution: i32,
+) -> (HashMap<i32, i8>, HashMap<i32, i8>) {
     let mut aspect_lookup_table = HashMap::<i32, i8>::new();
-    let mut slope_lookup_table = HashMap::<i32, i16>::new();
+    let mut slope_lookup_table = HashMap::<i32, i8>::new();
 
     for y in 1..dem.size - 1 {
         for x in 1..dem.size - 1 {
@@ -55,7 +60,7 @@ pub fn construct_lookup_tables(
             let (slope, aspect) = calculate_slope_and_aspect(p, q);
 
             if q >= 0 && p > 0 {
-                let aspect_key = q * aspect_resolution / p;
+                let aspect_key = q * resolution / p;
                 let aspect_deg = rad_to_deg(aspect) - 270.;
                 aspect_lookup_table.insert(aspect_key, aspect_deg as i8);
             }
@@ -64,19 +69,66 @@ pub fn construct_lookup_tables(
             let qi = q / 8;
             let slope_key = pi * pi + qi * qi;
             let slope_deg = rad_to_deg(slope);
-            slope_lookup_table.insert(slope_key, slope_deg as i16);
+            slope_lookup_table.insert(slope_key, slope_deg as i8);
         }
     }
 
     (slope_lookup_table, aspect_lookup_table)
 }
 
-fn save_aspect_lookup_table(
+fn save_lookup_table(
+    lookup_table_name: &str,
     lookup_table: HashMap<i32, i8>,
     resolution: i32,
     max_repeated_values: i32,
 ) {
-    // sort the table by keys
+    let (sorted_keys, first_index, last_index) =
+        find_first_and_last_occurrences_for_each_lookup_value(&lookup_table);
+
+    let mut file = File::create(format!(
+        "target/debug/{}_lookup_{}.cpp",
+        lookup_table_name, resolution
+    ))
+    .unwrap();
+
+    writeln!(file, "#include <stdint.h>").unwrap();
+    writeln!(file, "").unwrap();
+    writeln!(
+        file,
+        "int16_t {}_lookup_{}[] = {{",
+        lookup_table_name, resolution
+    )
+    .unwrap();
+
+    render_lookup_table_array(
+        lookup_table,
+        &first_index,
+        &last_index,
+        sorted_keys,
+        max_repeated_values,
+        &mut file,
+    );
+
+    render_truncated_values_constants(
+        lookup_table_name,
+        first_index,
+        last_index,
+        resolution,
+        max_repeated_values,
+        &mut file,
+    );
+
+    file.flush().unwrap();
+}
+
+/// For the given lookup table, sort the keys ascendingly and find the first
+/// and last index of each value.
+/// This information will be used to truncate the lookup table generated in the
+/// C++ code to reduce its size. Instead of the repeated values, we will use
+/// C++ macros to define the first index of each repeated value.
+fn find_first_and_last_occurrences_for_each_lookup_value(
+    lookup_table: &HashMap<i32, i8>,
+) -> (Vec<i32>, HashMap<i8, i32>, HashMap<i8, i32>) {
     let mut sorted_keys: Vec<i32> = lookup_table.keys().cloned().collect();
     sorted_keys.sort();
 
@@ -97,16 +149,50 @@ fn save_aspect_lookup_table(
 
     last_index.insert(last_value, index - 1);
 
-    let mut file = std::fs::File::create(format!(
-        "target/debug/aspect_lookup_{}.cpp",
-        resolution
-    ))
-    .unwrap();
+    (sorted_keys, first_index, last_index)
+}
 
-    writeln!(file, "#include <stdint.h>").unwrap();
-    writeln!(file, "").unwrap();
-    writeln!(file, "int16_t aspect_lookup_{}[] = {{", resolution).unwrap();
+fn render_truncated_values_constants(
+    lookup_table_name: &str,
+    first_index: HashMap<i8, i32>,
+    last_index: HashMap<i8, i32>,
+    resolution: i32,
+    max_repeated_values: i32,
+    file: &mut File,
+) {
+    let mut values_first_index_sorted: Vec<i8> =
+        first_index.keys().cloned().collect();
+    values_first_index_sorted.sort();
+    values_first_index_sorted.reverse();
 
+    for value in values_first_index_sorted {
+        let first_index = first_index.get(&value).unwrap();
+        let last_index = last_index.get(&value).unwrap();
+        let occurrences = last_index - first_index + 1;
+
+        if occurrences >= max_repeated_values {
+            // write hexadecimal byte value
+            writeln!(
+                file,
+                "#define {}_{}_{} = {}",
+                lookup_table_name.to_uppercase(),
+                resolution,
+                value,
+                first_index
+            )
+            .unwrap();
+        }
+    }
+}
+
+fn render_lookup_table_array(
+    lookup_table: HashMap<i32, i8>,
+    first_index: &HashMap<i8, i32>,
+    last_index: &HashMap<i8, i32>,
+    sorted_keys: Vec<i32>,
+    max_repeated_values: i32,
+    file: &mut File,
+) {
     let mut comma = "";
 
     for key in sorted_keys {
@@ -126,48 +212,6 @@ fn save_aspect_lookup_table(
     writeln!(file, "").unwrap();
     writeln!(file, "}};").unwrap();
     writeln!(file, "").unwrap();
-
-    let mut values_first_index_sorted: Vec<i8> =
-        first_index.keys().cloned().collect();
-    values_first_index_sorted.sort();
-    values_first_index_sorted.reverse();
-
-    for value in values_first_index_sorted {
-        let first_index = first_index.get(&value).unwrap();
-        let last_index = last_index.get(&value).unwrap();
-        let occurrences = last_index - first_index + 1;
-
-        if occurrences >= max_repeated_values {
-            // write hexadecimal byte value
-            writeln!(
-                file,
-                "#define ASPECT_{}_{} = {}",
-                resolution, value, first_index
-            )
-            .unwrap();
-        }
-    }
-
-    file.flush().unwrap();
-}
-
-fn save_lookup_table(lookup_table_name: &str, lookup_table: HashMap<i32, i16>) {
-    // sort the table by keys
-    let mut sorted_keys: Vec<i32> = lookup_table.keys().cloned().collect();
-    sorted_keys.sort();
-
-    let mut file = std::fs::File::create(format!(
-        "target/debug/{}.txt",
-        lookup_table_name
-    ))
-    .unwrap();
-
-    for key in sorted_keys {
-        let value = lookup_table.get(&key).unwrap();
-        writeln!(file, "{}: {}", key, value).unwrap();
-    }
-
-    file.flush().unwrap();
 }
 
 #[cfg(test)]
@@ -181,11 +225,17 @@ mod tests {
         let aspect_resolution = 100;
         let (slope_lookup_table, aspect_lookup_table) =
             construct_lookup_tables(&dem, aspect_resolution);
-        save_lookup_table("slope_lookup", slope_lookup_table);
 
         let max_repeated_values = 25;
-        save_aspect_lookup_table(
+        save_lookup_table(
+            "aspect",
             aspect_lookup_table,
+            aspect_resolution,
+            max_repeated_values,
+        );
+        save_lookup_table(
+            "slope",
+            slope_lookup_table,
             aspect_resolution,
             max_repeated_values,
         );
