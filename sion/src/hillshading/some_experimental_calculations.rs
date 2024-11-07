@@ -85,9 +85,19 @@ pub fn calculate_aspect_1(p: f32, q: f32) -> f32 {
     }
 }
 
+pub fn calculate_aspect_2(p_prime: i16, q_prime: i16) -> f32 {
+    let aspect = (q_prime as f32).atan2(p_prime as f32);
+    if aspect < 0. {
+        rad_to_deg(aspect) + 360.
+    } else {
+        rad_to_deg(aspect)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::assert_eq_approx;
 
     #[test]
     fn test_eastward_slope() {
@@ -105,6 +115,7 @@ mod tests {
 
         let (p_prime, q_prime) = calculate_pq_2(&elevations);
         assert_eq!(calculate_slope_2(d, p_prime, q_prime), 45.);
+        assert_eq!(calculate_aspect_2(p_prime, q_prime), 0.);
     }
 
     #[test]
@@ -120,6 +131,10 @@ mod tests {
         assert_eq!(q, 0.);
         assert_eq!(calculate_slope_1(p, q), 45.);
         assert_eq!(calculate_aspect_1(p, q), 180.);
+
+        let (p_prime, q_prime) = calculate_pq_2(&elevations);
+        assert_eq!(calculate_slope_2(d, p_prime, q_prime), 45.);
+        assert_eq!(calculate_aspect_2(p_prime, q_prime), 180.);
     }
 
     #[test]
@@ -135,6 +150,10 @@ mod tests {
         assert_eq!(q, 1.);
         assert_eq!(calculate_slope_1(p, q), 45.);
         assert_eq!(calculate_aspect_1(p, q), 90.);
+
+        let (p_prime, q_prime) = calculate_pq_2(&elevations);
+        assert_eq!(calculate_slope_2(d, p_prime, q_prime), 45.);
+        assert_eq!(calculate_aspect_2(p_prime, q_prime), 90.);
     }
 
     #[test]
@@ -150,6 +169,10 @@ mod tests {
         assert_eq!(q, -1.);
         assert_eq!(calculate_slope_1(p, q), 45.);
         assert_eq!(calculate_aspect_1(p, q), 270.);
+
+        let (p_prime, q_prime) = calculate_pq_2(&elevations);
+        assert_eq!(calculate_slope_2(d, p_prime, q_prime), 45.);
+        assert_eq!(calculate_aspect_2(p_prime, q_prime), 270.);
     }
 
     #[test]
@@ -165,5 +188,13 @@ mod tests {
         assert_eq!(q, 0.475);
         assert_eq!(calculate_slope_1(p, q), 29.52283);
         assert_eq!(calculate_aspect_1(p, q), 57.011475);
+
+        let (p_prime, q_prime) = calculate_pq_2(&elevations);
+        assert_eq!(calculate_slope_2(d, p_prime, q_prime), 29.52283);
+        assert_eq_approx(
+            calculate_aspect_2(p_prime, q_prime),
+            57.011475,
+            0.0001,
+        );
     }
 }
