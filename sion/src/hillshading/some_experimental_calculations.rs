@@ -76,6 +76,15 @@ pub fn calculate_slope_2(d: i16, p_prime: i16, q_prime: i16) -> f32 {
     rad_to_deg(slope.atan())
 }
 
+pub fn calculate_slope_3(zoom_level: i16, p_prime: i16, q_prime: i16) -> f32 {
+    let p_prime_32 = p_prime as f32;
+    let q_prime_32 = q_prime as f32;
+    let root = (p_prime_32 * p_prime_32 + q_prime_32 * q_prime_32).sqrt();
+    let slope = root * 2_f32.powf(zoom_level as f32) / (45. * 8.);
+
+    rad_to_deg(slope.atan())
+}
+
 pub fn calculate_aspect_1(p: f32, q: f32) -> f32 {
     let aspect = q.atan2(p);
     if aspect < 0. {
@@ -142,8 +151,18 @@ mod tests {
             1000, 1045, 1090, 1000, 1045, 1090, 1000, 1045, 1090,
         ]);
 
-        assert_calculations(&elevations, 45, 1., 0., 45., 0., 95);
-        assert_calculations(&elevations, 90, 0.5, 0., 26.56505, 0., 136);
+        assert_calculations(&elevations, 45, 0, 1., 0., 45., 0., 95);
+        assert_calculations(&elevations, 90, -1, 0.5, 0., 26.56505, 0., 136);
+        assert_calculations(
+            &elevations,
+            22,
+            1,
+            2.0454545,
+            0.,
+            63.946503,
+            0.,
+            57,
+        );
     }
 
     #[test]
@@ -152,8 +171,18 @@ mod tests {
             1090, 1045, 1000, 1090, 1045, 1000, 1090, 1045, 1000,
         ]);
 
-        assert_calculations(&elevations, 45, -1., 0., 45., 180., 31);
-        assert_calculations(&elevations, 90, -0.5, 0., 26.56505, 180., 45);
+        assert_calculations(&elevations, 45, 0, -1., 0., 45., 180., 31);
+        assert_calculations(&elevations, 90, -1, -0.5, 0., 26.56505, 180., 45);
+        assert_calculations(
+            &elevations,
+            22,
+            1,
+            -2.0454545,
+            0.,
+            63.946503,
+            180.,
+            19,
+        );
     }
 
     #[test]
@@ -162,8 +191,18 @@ mod tests {
             1000, 1000, 1000, 1045, 1045, 1045, 1090, 1090, 1090,
         ]);
 
-        assert_calculations(&elevations, 45, 0., 1., 45., 90., 95);
-        assert_calculations(&elevations, 90, 0., 0.5, 26.56505, 90., 136);
+        assert_calculations(&elevations, 45, 0, 0., 1., 45., 90., 95);
+        assert_calculations(&elevations, 90, -1, 0., 0.5, 26.56505, 90., 136);
+        assert_calculations(
+            &elevations,
+            22,
+            1,
+            0.,
+            2.0454545,
+            63.946503,
+            90.,
+            57,
+        );
     }
 
     #[test]
@@ -172,8 +211,18 @@ mod tests {
             1090, 1090, 1090, 1045, 1045, 1045, 1000, 1000, 1000,
         ]);
 
-        assert_calculations(&elevations, 45, 0., -1., 45., 270., 31);
-        assert_calculations(&elevations, 90, 0., -0.5, 26.56505, 270., 45);
+        assert_calculations(&elevations, 45, 0, 0., -1., 45., 270., 31);
+        assert_calculations(&elevations, 90, -1, 0., -0.5, 26.56505, 270., 45);
+        assert_calculations(
+            &elevations,
+            22,
+            1,
+            0.,
+            -2.0454545,
+            63.946503,
+            270.,
+            19,
+        );
     }
 
     #[test]
@@ -185,6 +234,7 @@ mod tests {
         assert_calculations(
             &elevations,
             45,
+            0,
             0.30833334,
             0.475,
             29.52283,
@@ -194,17 +244,29 @@ mod tests {
         assert_calculations(
             &elevations,
             90,
+            -1,
             0.15416667,
             0.2375,
             15.809441,
             57.011475,
             198,
         );
+        assert_calculations(
+            &elevations,
+            22,
+            1,
+            0.6306818,
+            0.97159094,
+            49.195778,
+            57.011475,
+            108,
+        );
     }
 
     fn assert_calculations(
         elevations: &Matrix3x3,
         d: i16,
+        zoom: i16,
         expected_p: f32,
         expected_q: f32,
         expected_slope: f32,
@@ -217,16 +279,26 @@ mod tests {
         assert_eq!(q, expected_q);
 
         let slope = calculate_slope_1(p, q);
-        assert_eq!(slope, expected_slope);
+        assert_eq!(slope, expected_slope, "slope_1");
         let aspect = calculate_aspect_1(p, q);
-        assert_eq!(aspect, expected_aspect);
+        assert_eq_approx(aspect, expected_aspect, 0.001);
 
         let (p_prime, q_prime) = calculate_pq_2(&elevations);
-        assert_eq!(calculate_slope_2(d, p_prime, q_prime), expected_slope);
+        assert_eq!(
+            calculate_slope_2(d, p_prime, q_prime),
+            expected_slope,
+            "slope_2"
+        );
         assert_eq_approx(
             calculate_aspect_2(p_prime, q_prime),
             expected_aspect,
             0.0001,
+        );
+
+        assert_eq_approx(
+            calculate_slope_3(zoom, p_prime, q_prime),
+            expected_slope,
+            1.,
         );
 
         let sun_azimuth = 45;
