@@ -122,6 +122,15 @@ pub fn hillshading_2(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     color
 }
 
+pub fn hillshading_3(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
+    let slope_light_intensity = ((90 - slope as i32) << 8) / 90;
+    let aspect_diff = diff_between_angles_deg(aspect, sun_azimuth);
+    let aspect_light_intensity = ((180 - aspect_diff as i32) << 8) / 180;
+    let light_intensity = (slope_light_intensity * aspect_light_intensity) >> 8;
+    let color = light_intensity as i16;
+    color
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,6 +233,8 @@ mod tests {
         let color = hillshading_1(sun_azimuth, slope as i16, aspect as i16);
         assert_eq!(color, expected_hillshading_color, "hillshading_1");
         let color = hillshading_2(sun_azimuth, slope as i16, aspect as i16);
+        assert_eq_approx(color, expected_hillshading_color, 1);
+        let color = hillshading_3(sun_azimuth, slope as i16, aspect as i16);
         assert_eq_approx(color, expected_hillshading_color, 1);
     }
 }
