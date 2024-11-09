@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn calculate_lookup_tables() {
-        let dem = DemTile::from_file("tests/data/N46E006.hgt");
+        let dem = DemTile::from_hgt_file("tests/data/N46E006.hgt");
         let aspect_resolution = 100;
         let (slope_lookup_table, aspect_lookup_table) =
             construct_lookup_tables(&dem, aspect_resolution);

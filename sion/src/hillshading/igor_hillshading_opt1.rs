@@ -76,14 +76,26 @@ mod tests {
     use crate::grayscale_bitmap::GrayscaleBitmap;
 
     #[test]
-    fn hillshade_of_whole_dem() {
-        let dem = DemTile::from_file("tests/data/N46E006.hgt");
+    fn hillshade_of_whole_dem_hgt() {
+        let dem = DemTile::from_hgt_file("tests/data/N46E006.hgt");
         let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
         let parameters = HillshadingParameters::default();
         hillshade(&dem, &parameters, &mut bitmap);
 
         bitmap
-            .write_to_png("target/debug/igor_hillshading_opt1.png")
+            .write_to_png("target/debug/igor_hillshading_opt1_hgt.png")
+            .unwrap()
+    }
+
+    #[test]
+    fn hillshade_of_whole_dem_xth() {
+        let dem = DemTile::from_xth_file("tests/data/N46E006.xth");
+        let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
+        let parameters = HillshadingParameters::default();
+        hillshade(&dem, &parameters, &mut bitmap);
+
+        bitmap
+            .write_to_png("target/debug/igor_hillshading_opt1_xth.png")
             .unwrap()
     }
 }

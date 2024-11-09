@@ -80,6 +80,7 @@ pub fn calculate_slope_3(zoom_level: i16, p_prime: i16, q_prime: i16) -> f32 {
     let p_prime_32 = p_prime as f32;
     let q_prime_32 = q_prime as f32;
     let root = (p_prime_32 * p_prime_32 + q_prime_32 * q_prime_32).sqrt();
+    // slope needs to be a float value, otherwise atan() will not work properly
     let slope = root * 2_f32.powf(zoom_level as f32) / (45. * 8.);
 
     rad_to_deg(slope.atan())

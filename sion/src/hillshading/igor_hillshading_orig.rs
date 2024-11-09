@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn hillshade_of_whole_dem() {
-        let dem = DemTile::from_file("tests/data/N46E006.hgt");
+        let dem = DemTile::from_hgt_file("tests/data/N46E006.hgt");
         let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
         let parameters = HillshadingParameters::default();
         hillshade(&dem, &parameters, &mut bitmap);

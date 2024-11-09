@@ -1,4 +1,5 @@
 use crate::errors::SionError;
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::os::windows::fs::MetadataExt;
@@ -21,8 +22,7 @@ impl DemTile {
         }
     }
 
-    // create a static constructor that reads the data from a file
-    pub fn from_file(file: &str) -> DemTile {
+    pub fn from_hgt_file(file: &str) -> DemTile {
         let tile_name = Path::new(file)
             .file_stem()
             .and_then(|stem| stem.to_str())
@@ -46,6 +46,51 @@ impl DemTile {
                     reader
                         .read_exact(&mut byte_array)
                         .expect("Failed to read the HGT file.");
+
+                    DemTile::new(lon, lat, tile_size as usize, byte_array)
+                } else {
+                    panic!("The HGT file does not contain a square number of heights");
+                }
+            }
+            Err(error) => {
+                // raise an error if the file cannot be opened
+                panic!("Problem opening the HGT file: {:?}", error);
+            }
+        }
+    }
+
+    pub fn from_xth_file(file: &str) -> DemTile {
+        let tile_name = Path::new(file)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap();
+        let (lon, lat) = DemTile::parse_tile_name(tile_name).unwrap();
+
+        let file = File::open(file);
+        match file {
+            Ok(file) => {
+                // get the file size
+                let metadata = file.metadata().unwrap();
+                let total_heights_count = metadata.file_size() / 2;
+
+                let tile_size = (total_heights_count as f64).sqrt() as u64;
+                if tile_size * tile_size == total_heights_count {
+                    // read the whole file into a byte array
+                    let mut reader = BufReader::new(file);
+
+                    let mut byte_array: Vec<u8> =
+                        vec![0; metadata.file_size() as usize];
+
+                    // since XTH is little-endian, we need to read each height
+                    // as little-endian value and then write it as big-endian
+                    // into the tile's byte array
+                    let mut i = 0;
+                    while let Ok(height) = reader.read_i16::<LittleEndian>() {
+                        // now encode the height into a byte array
+                        byte_array[i] = (height >> 8) as u8;
+                        byte_array[i + 1] = height as u8;
+                        i += 2;
+                    }
 
                     DemTile::new(lon, lat, tile_size as usize, byte_array)
                 } else {
@@ -165,7 +210,7 @@ mod tests {
 
     #[test]
     fn read_from_file() {
-        let tile = DemTile::from_file("tests/data/N46E006.hgt");
+        let tile = DemTile::from_hgt_file("tests/data/N46E006.hgt");
         assert_eq!(tile.lon, 6);
         assert_eq!(tile.lat, 46);
         assert_eq!(tile.size, 3601);
