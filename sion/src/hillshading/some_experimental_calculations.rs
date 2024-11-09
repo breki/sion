@@ -310,4 +310,155 @@ mod tests {
         let color = hillshading_3(sun_azimuth, slope as i16, aspect as i16);
         assert_eq_approx(color, expected_hillshading_color, 1);
     }
+
+    #[test]
+    fn test_icebreaker() {
+        fn latitude_to_world_cell_y_and_fraction(
+            lat: f32,
+            tile_size: i16,
+        ) -> (i16, f32) {
+            let lat_int = lat as i16;
+            let fraction = lat - (lat as i16) as f32;
+            let cell_with_fraction = fraction * (tile_size as f32);
+            let local_cell_y = cell_with_fraction.floor() as i16;
+            let world_cell_y = lat_int * tile_size + local_cell_y;
+            let mut cell_fraction =
+                cell_with_fraction - (cell_with_fraction as i16) as f32;
+            if local_cell_y < 0 {
+                cell_fraction = 1. + cell_fraction;
+            }
+            (world_cell_y, cell_fraction)
+        }
+
+        fn from_world_cell_y_to_latitude_and_local_cell_y(
+            world_cell_y: i16,
+            tile_size: i16,
+        ) -> (i16, i16) {
+            let mut lat = world_cell_y / tile_size;
+            if world_cell_y < 0 {
+                lat = lat - 1;
+            }
+
+            let mut modulo = world_cell_y % tile_size;
+            if modulo < 0 {
+                modulo = tile_size + modulo;
+            }
+
+            let local_cell_y = tile_size - 1 - modulo;
+            (lat, local_cell_y)
+        }
+
+        let tile_size = 1800;
+
+        let lat = 0.177;
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 318);
+        assert_eq!(cell_fraction, 0.6000061);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (0, 1481)
+        );
+
+        let lat = 0.;
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 0);
+        assert_eq!(cell_fraction, 0.);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (0, 1799)
+        );
+
+        let lat = -0.0001 / (tile_size as f32);
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, -1);
+        assert_eq!(cell_fraction, 0.9999);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (-1, 0)
+        );
+
+        let lat = 0.0001 / (tile_size as f32);
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 0);
+        assert_eq!(cell_fraction, 0.0001);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (0, 1799)
+        );
+
+        let lat = (-0.5001) / (tile_size as f32);
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, -1);
+        assert_eq_approx(cell_fraction, 0.4999, 0.0001);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (-1, 0)
+        );
+
+        let lat = 0.5 / (tile_size as f32);
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 0);
+        assert_eq!(cell_fraction, 0.5);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (0, 1799)
+        );
+
+        let lat = 7.5;
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 13500);
+        assert_eq!(cell_fraction, 0.);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (7, 899)
+        );
+
+        let lat = 8.;
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 14400);
+        assert_eq!(cell_fraction, 0.);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (8, 1799)
+        );
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y - 1,
+                tile_size
+            ),
+            (7, 0)
+        );
+    }
 }
