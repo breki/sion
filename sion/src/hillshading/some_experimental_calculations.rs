@@ -316,12 +316,13 @@ mod tests {
         fn latitude_to_world_cell_y_and_fraction(
             lat: f32,
             tile_size: i16,
-        ) -> (i16, f32) {
+        ) -> (i32, f32) {
             let lat_int = lat as i16;
-            let fraction = lat - (lat as i16) as f32;
+            let fraction = lat - lat_int as f32;
             let cell_with_fraction = fraction * (tile_size as f32);
             let local_cell_y = cell_with_fraction.floor() as i16;
-            let world_cell_y = lat_int * tile_size + local_cell_y;
+            let world_cell_y =
+                (lat_int as i32) * (tile_size as i32) + (local_cell_y as i32);
             let mut cell_fraction =
                 cell_with_fraction - (cell_with_fraction as i16) as f32;
             if local_cell_y < 0 {
@@ -331,21 +332,21 @@ mod tests {
         }
 
         fn from_world_cell_y_to_latitude_and_local_cell_y(
-            world_cell_y: i16,
+            world_cell_y: i32,
             tile_size: i16,
         ) -> (i16, i16) {
-            let mut lat = world_cell_y / tile_size;
+            let mut lat = world_cell_y / (tile_size as i32);
             if world_cell_y < 0 {
                 lat = lat - 1;
             }
 
-            let mut modulo = world_cell_y % tile_size;
+            let mut modulo = world_cell_y % (tile_size as i32);
             if modulo < 0 {
-                modulo = tile_size + modulo;
+                modulo = (tile_size as i32) + modulo;
             }
 
-            let local_cell_y = tile_size - 1 - modulo;
-            (lat, local_cell_y)
+            let local_cell_y = tile_size - 1 - (modulo as i16);
+            (lat as i16, local_cell_y)
         }
 
         let tile_size = 1800;
@@ -459,6 +460,19 @@ mod tests {
                 tile_size
             ),
             (7, 0)
+        );
+
+        let lat = 46.499889;
+        let (world_cell_y, cell_fraction) =
+            latitude_to_world_cell_y_and_fraction(lat, tile_size);
+        assert_eq!(world_cell_y, 83699);
+        assert_eq!(cell_fraction, 0.8009033);
+        assert_eq!(
+            from_world_cell_y_to_latitude_and_local_cell_y(
+                world_cell_y,
+                tile_size
+            ),
+            (46, 900)
         );
     }
 }
