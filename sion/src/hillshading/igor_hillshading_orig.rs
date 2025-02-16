@@ -38,8 +38,6 @@ pub fn calculate_pq(
             + height_tl))
         / vertical_spacing_mul8;
 
-    println!("p: {}, q: {}", p, q);
-
     (p, q)
 }
 
