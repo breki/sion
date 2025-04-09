@@ -11,3 +11,4 @@ pub mod proj;
 pub mod slopes;
 pub mod testing;
 pub mod trig;
+mod water_bodies;

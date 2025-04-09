@@ -40,7 +40,6 @@ impl XasTile {
 mod tests {
     use crate::consts::EARTH_CIRCUMFERENCE_METERS;
     use crate::dem_tile::DemTile;
-    use crate::grayscale_bitmap::GrayscaleBitmap;
     use crate::hillshading::igor_hillshading_orig::{
         calculate_pq, calculate_slope_and_aspect,
     };
@@ -89,20 +88,6 @@ mod tests {
 
                 assert_eq_approx(aspect, aspect2, 0.5);
                 assert_eq_approx(slope, slope2, 0.5);
-            }
-        }
-
-        let display_width = 800;
-        let display_height = 600;
-        let display_image = GrayscaleBitmap::new(display_width, display_height);
-
-        let map_center_lon = 6.5;
-        let map_center_lat = 46.5;
-        let map_zoom_level = 0;
-
-        for y in 0..display_height - 1 {
-            for x in 0..display_width - 1 {
-                // calculate the pixel position in DEM cell coordinates
             }
         }
     }
