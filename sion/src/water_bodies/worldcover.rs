@@ -9,8 +9,23 @@ type DemTileId = String;
 const WORLD_COVER_S3_DOMAIN: &str =
     "https://esa-worldcover.s3.eu-central-1.amazonaws.com";
 
+const WORLD_COVER_VERSION: &str = "v200";
+const WORLD_COVER_YEAR: &str = "2021";
+
 fn geojson_url() -> String {
     format!("{}/esa_worldcover_grid.geojson", WORLD_COVER_S3_DOMAIN)
+}
+
+fn world_cover_tile_download_url(tile_id: &DemTileId) -> String {
+    format!(
+        "{}/{}/{}/map/ESA_WorldCover_10m_{}_{}_{}_Map.tif",
+        WORLD_COVER_S3_DOMAIN,
+        WORLD_COVER_VERSION,
+        WORLD_COVER_YEAR,
+        WORLD_COVER_YEAR,
+        WORLD_COVER_VERSION,
+        tile_id
+    )
 }
 
 fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
@@ -118,6 +133,7 @@ fn list_all_available_files(
 mod tests {
     use crate::water_bodies::worldcover::{
         ensure_geojson_file, list_all_available_files,
+        world_cover_tile_download_url, DemTileId,
     };
     use std::path::Path;
 
@@ -142,10 +158,12 @@ mod tests {
         let files = files_result.unwrap();
         assert!(!files.is_empty(), "No files found in the GeoJSON.");
         assert!(files.len() > 100, "Too few files found in the GeoJSON.");
-    }
 
-    #[test]
-    fn test2() {
-        assert!(true);
+        let sample_tile_id: &DemTileId = &files[0];
+        println!("Example file: {:?}", files[0]);
+        assert_eq!(
+            world_cover_tile_download_url(sample_tile_id),
+            "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/\
+            ESA_WorldCover_10m_2021_v200_S54E168_Map.tif")
     }
 }
