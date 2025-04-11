@@ -1,10 +1,15 @@
+use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
 use std::fs::File;
-use std::io::Cursor;
-use std::io::{self, BufReader};
+use std::io::{self, BufReader, Seek, SeekFrom};
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use tiff::decoder::Decoder;
+use tiff::tags::{CompressionMethod, PlanarConfiguration, Tag};
 
 type DemTileId = String;
+
+type _HeightsArray = Vec<i16>; // Replace with your actual HeightsArray type.
 
 const WORLD_COVER_S3_DOMAIN: &str =
     "https://esa-worldcover.s3.eu-central-1.amazonaws.com";
@@ -13,6 +18,11 @@ const WORLD_COVER_VERSION: &str = "v200";
 const WORLD_COVER_YEAR: &str = "2021";
 
 const WORLD_COVER_CACHE_DIR: &str = "WorldCover";
+
+const WORLD_COVER_TILE_SIZE: u32 = 12000;
+const WORLD_COVER_TILES_IN_BATCH: u32 = 3;
+const WORLD_COVER_BITMAP_SIZE: u32 =
+    WORLD_COVER_TILE_SIZE * WORLD_COVER_TILES_IN_BATCH;
 
 fn geojson_url() -> String {
     format!("{}/esa_worldcover_grid.geojson", WORLD_COVER_S3_DOMAIN)
@@ -152,16 +162,204 @@ fn list_all_available_files(
     Ok(tiles)
 }
 
+fn decompress_tile_data(
+    compressed_data: &mut BufReader<File>,
+    compressed_size: u32,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    // Read the compressed data into a buffer
+    let mut compressed_buffer = vec![0; compressed_size as usize];
+    compressed_data.read_exact(&mut compressed_buffer)?;
+
+    // Create a ZlibDecoder to decompress the data
+    let mut decompressor = ZlibDecoder::new(&compressed_buffer[..]);
+
+    // Prepare a buffer for the decompressed data
+    let mut decompressed_data = Vec::new();
+
+    // Decompress the data into the buffer
+    decompressor.read_to_end(&mut decompressed_data)?;
+
+    Ok(decompressed_data)
+}
+
+pub fn read_world_cover_tiff_file(
+    world_cover_tiff_file_name: &Path,
+) -> Result<(), String> {
+    let file = match File::open(&world_cover_tiff_file_name) {
+        Ok(file) => file,
+        Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
+    };
+
+    let mut decoder = match Decoder::new(file) {
+        Ok(decoder) => decoder,
+        Err(e) => return Err(format!("Failed to create TIFF decoder: {}", e)),
+    };
+
+    // Validate raster dimensions
+    let (image_width, image_height) = match decoder.dimensions() {
+        Ok((width, height)) => (width, height),
+        Err(e) => return Err(format!("Failed to get TIFF dimensions: {}", e)),
+    };
+
+    if image_width != WORLD_COVER_BITMAP_SIZE
+        || image_height != WORLD_COVER_BITMAP_SIZE
+    {
+        return Err(format!(
+            "Expected dimensions {}x{}, but got {}x{}",
+            WORLD_COVER_BITMAP_SIZE,
+            WORLD_COVER_BITMAP_SIZE,
+            image_width,
+            image_height
+        )
+        .into());
+    }
+
+    match decoder.get_tag_u32(Tag::PlanarConfiguration) {
+        Ok(v) => {
+            if (v as u16) != PlanarConfiguration::Chunky.to_u16() {
+                return Err(format!(
+                    "Expected CONTIG/Chunky planar configuration, but got {:?}",
+                    v
+                ))
+                .into();
+            }
+        }
+        Err(e) => {
+            return Err(format!(
+                "Failed to get TIFF planar configuration: {}",
+                e
+            ))
+        }
+    }
+
+    let tile_width = match decoder.get_tag_u32(Tag::TileWidth) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(format!(
+            "Failed to get tile width, looks like this TIFF is not tiled: {}",
+            e
+        ))
+        }
+    };
+
+    let tile_height = match decoder.get_tag_u32(Tag::TileLength) {
+        Ok(v) => v,
+        Err(e) => {
+            return Err(format!(
+            "Failed to get tile length, looks like this TIFF is not tiled: {}",
+            e
+        ))
+        }
+    };
+
+    let tile_size_bytes = tile_width * tile_height;
+
+    if let Some(tile_offsets) = decoder.get_tag(Tag::TileOffsets).ok() {
+        println!("Tile Offsets: {:?}", tile_offsets);
+    }
+
+    // Compression tag
+    match decoder.get_tag_u32(Tag::Compression) {
+        Ok(comp) => {
+            let compression_method = CompressionMethod::from_u16(comp as u16)
+                .unwrap_or(CompressionMethod::Unknown(comp as u16));
+            println!("Compression: {:?}", compression_method);
+        }
+        _ => println!("Compression tag not found"),
+    };
+
+    // Calculate number of tiles (rows and columns of tiles)
+    let tiles_per_row = (image_width + tile_width - 1) / tile_width;
+    let tiles_per_column = (image_height + tile_height - 1) / tile_height;
+
+    // let mut _all_tiles_data: Vec<u8> =
+    //     Vec::with_capacity((image_width * image_height) as usize);
+
+    let file_for_image_data = match File::open(&world_cover_tiff_file_name) {
+        Ok(file) => file,
+        Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
+    };
+
+    let mut reader = BufReader::new(file_for_image_data);
+
+    // Loop over each tile and decompress it
+    for row in 0..tiles_per_column {
+        for col in 0..tiles_per_row {
+            // Get the index of the tile
+            let tile_index = (row * tiles_per_row + col) as usize;
+
+            // Get the offset and byte count for the tile
+            let tile_offset: u32 = match decoder
+                .get_tag_u32_vec(Tag::TileOffsets)
+            {
+                Ok(v) => *v.get(tile_index).unwrap(),
+                Err(e) => {
+                    return Err(format!("Failed to get tile offsets: {}", e))
+                }
+            };
+
+            let tile_byte_count: u32 =
+                match decoder.get_tag_u32_vec(Tag::TileByteCounts) {
+                    Ok(v) => *v.get(tile_index).unwrap(),
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to get tile byte counts: {}",
+                            e
+                        ))
+                    }
+                };
+
+            match reader.seek(SeekFrom::Start(tile_offset as u64)) {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(format!("Failed to seek to tile offset: {}", e))
+                }
+            }
+
+            // Decompress the tile data
+            let decompressed_data =
+                match decompress_tile_data(&mut reader, tile_byte_count) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        return Err(format!(
+                            "Failed to decompress tile data: {}",
+                            e
+                        ))
+                    }
+                };
+
+            println!(
+                "Tile {}: Offset: {}, Byte Count: {}, Decompressed Size: {}",
+                tile_index,
+                tile_offset,
+                tile_byte_count,
+                decompressed_data.len()
+            );
+
+            if decompressed_data.len() != tile_size_bytes as usize {
+                return Err(format!(
+                    "Decompressed data size does not match expected size: {}",
+                    decompressed_data.len()
+                ));
+            }
+
+            // todo 0: fill the main array with the decompressed tile data
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::water_bodies::worldcover::{
         ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
-        world_cover_tile_download_url, DemTileId,
+        read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
     };
     use std::path::Path;
 
     #[test]
-    fn icebreaker() {
+    fn load_world_cover_tiff_tile() {
         let cache_dir = Path::new("cache");
 
         let result = ensure_geojson_file(cache_dir);
@@ -191,5 +389,15 @@ mod tests {
 
         let tile_result = ensure_world_cover_tile(cache_dir, sample_tile_id);
         assert!(tile_result.is_ok(), "Error: {:?}", tile_result.unwrap_err());
+
+        let tile_path = tile_result.unwrap();
+        let tile_reading_result =
+            read_world_cover_tiff_file(tile_path.as_path());
+
+        assert!(
+            tile_reading_result.is_ok(),
+            "Error: {:?}",
+            tile_reading_result.unwrap_err()
+        );
     }
 }

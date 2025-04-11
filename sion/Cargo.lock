@@ -453,12 +453,12 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.0.31"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f211bbe8e69bbd0cfdea405084f128ae8b4aaa6b0b522fc8f2b009084797920"
+checksum = "7ced92e76e966ca2fd84c8f7aa01a4aea65b0eb6648d72f7c8f3e2764a67fece"
 dependencies = [
  "crc32fast",
- "miniz_oxide 0.7.4",
+ "miniz_oxide 0.8.8",
 ]
 
 [[package]]
@@ -1900,10 +1900,12 @@ version = "0.1.0"
 dependencies = [
  "byteorder",
  "criterion",
+ "flate2",
  "image",
  "reqwest",
  "rstest",
  "serde_json",
+ "tiff",
 ]
 
 [[package]]
