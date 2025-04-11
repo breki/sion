@@ -166,12 +166,11 @@ fn decompress_tile_data(
     compressed_data: &mut BufReader<File>,
     compressed_size: u32,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    // Read the compressed data into a buffer
-    let mut compressed_buffer = vec![0; compressed_size as usize];
-    compressed_data.read_exact(&mut compressed_buffer)?;
+    // Limit the reader to only read `compressed_size` bytes
+    let limited_reader = compressed_data.take(compressed_size as u64);
 
     // Create a ZlibDecoder to decompress the data
-    let mut decompressor = ZlibDecoder::new(&compressed_buffer[..]);
+    let mut decompressor = ZlibDecoder::new(limited_reader);
 
     // Prepare a buffer for the decompressed data
     let mut decompressed_data = Vec::new();
