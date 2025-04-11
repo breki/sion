@@ -1,0 +1,5 @@
+[toolchain]
+# Set to 1.85.1 because 1.86.0 is causing the all of the dependencies to
+# recompile on each test run inside RustRover
+# (see https://youtrack.jetbrains.com/issue/RUST-17453/Rust-1.86.0-running-tests-compiles-the-project-twice)
+channel = "1.85.1"
