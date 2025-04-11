@@ -12,6 +12,8 @@ const WORLD_COVER_S3_DOMAIN: &str =
 const WORLD_COVER_VERSION: &str = "v200";
 const WORLD_COVER_YEAR: &str = "2021";
 
+const WORLD_COVER_CACHE_DIR: &str = "WorldCover";
+
 fn geojson_url() -> String {
     format!("{}/esa_worldcover_grid.geojson", WORLD_COVER_S3_DOMAIN)
 }
@@ -28,17 +30,19 @@ fn world_cover_tile_download_url(tile_id: &DemTileId) -> String {
     )
 }
 
-fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
-    let cached_file_name = cache_dir.join("esa_worldcover_2020_grid.geojson");
-
+/// Ensure that the file is in the cache directory. If it is not, download it
+/// from the given URL and save it to the specified path in the cache directory.
+fn ensure_file_in_cache(
+    url: &str,
+    cached_file_name: &Path,
+) -> Result<PathBuf, String> {
     if cached_file_name.exists() {
-        Ok(cached_file_name)
+        Ok(cached_file_name.to_path_buf())
     } else {
-        // download the file from the geojson_url() to the cache_file_name
-        let response = match reqwest::blocking::get(geojson_url()) {
+        let response = match reqwest::blocking::get(url) {
             Ok(response) => response,
             Err(e) => {
-                return Err(format!("Failed to download geojson file: {}", e))
+                return Err(format!("Failed to download the file: {}", e))
             }
         };
 
@@ -57,7 +61,10 @@ fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
         let mut file = match File::create(&cached_file_name) {
             Ok(file) => file,
             Err(e) => {
-                return Err(format!("Failed to create geojson file: {}", e))
+                return Err(format!(
+                    "Failed to create the file in the cache: {}",
+                    e
+                ))
             }
         };
 
@@ -71,16 +78,32 @@ fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
         let mut cursor = Cursor::new(bytes);
 
         match std::io::copy(&mut cursor, &mut file) {
-            Ok(_) => {
-                println!(
-                    "Downloaded geojson file to {}",
-                    cached_file_name.display()
-                );
-                Ok(cached_file_name)
+            Ok(_) => Ok(cached_file_name.to_path_buf()),
+            Err(e) => {
+                Err(format!("Failed to write the file in the cache: {}", e))
             }
-            Err(e) => Err(format!("Failed to write geojson file: {}", e)),
         }
     }
+}
+
+fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
+    let cached_file_name = cache_dir
+        .join(WORLD_COVER_CACHE_DIR)
+        .join("esa_worldcover_2020_grid.geojson");
+    ensure_file_in_cache(&geojson_url(), &cached_file_name)
+}
+
+fn ensure_world_cover_tile(
+    cache_dir: &Path,
+    tile_id: &DemTileId,
+) -> Result<PathBuf, String> {
+    let cached_file_name = cache_dir
+        .join(WORLD_COVER_CACHE_DIR)
+        .join(format!("{}.tif", tile_id));
+    ensure_file_in_cache(
+        &world_cover_tile_download_url(&tile_id),
+        &cached_file_name,
+    )
 }
 
 fn list_all_available_files(
@@ -132,18 +155,18 @@ fn list_all_available_files(
 #[cfg(test)]
 mod tests {
     use crate::water_bodies::worldcover::{
-        ensure_geojson_file, list_all_available_files,
+        ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
         world_cover_tile_download_url, DemTileId,
     };
     use std::path::Path;
 
     #[test]
     fn icebreaker() {
-        let cache_dir = "cache";
+        let cache_dir = Path::new("cache");
 
-        let result = ensure_geojson_file(Path::new(cache_dir));
+        let result = ensure_geojson_file(cache_dir);
         assert!(result.is_ok(), "Error: {:?}", result.unwrap_err());
-        let result = ensure_geojson_file(Path::new(cache_dir));
+        let result = ensure_geojson_file(cache_dir);
         assert!(result.is_ok(), "Error: {:?}", result.unwrap_err());
 
         let geojson_file = result.unwrap();
@@ -164,6 +187,9 @@ mod tests {
         assert_eq!(
             world_cover_tile_download_url(sample_tile_id),
             "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/\
-            ESA_WorldCover_10m_2021_v200_S54E168_Map.tif")
+            ESA_WorldCover_10m_2021_v200_S54E168_Map.tif");
+
+        let tile_result = ensure_world_cover_tile(cache_dir, sample_tile_id);
+        assert!(tile_result.is_ok(), "Error: {:?}", tile_result.unwrap_err());
     }
 }
