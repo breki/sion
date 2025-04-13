@@ -4,8 +4,9 @@ use std::fs::File;
 use std::io::{self, BufReader, Seek, SeekFrom};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 use tiff::decoder::Decoder;
-use tiff::tags::{CompressionMethod, PlanarConfiguration, Tag};
+use tiff::tags::{PlanarConfiguration, Tag};
 
 type DemTileId = String;
 
@@ -184,6 +185,8 @@ fn decompress_tile_data(
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
 ) -> Result<(), String> {
+    let start = Instant::now();
+
     let file = match File::open(&world_cover_tiff_file_name) {
         Ok(file) => file,
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
@@ -253,20 +256,6 @@ pub fn read_world_cover_tiff_file(
 
     let tile_size_bytes = tile_width * tile_height;
 
-    if let Some(tile_offsets) = decoder.get_tag(Tag::TileOffsets).ok() {
-        println!("Tile Offsets: {:?}", tile_offsets);
-    }
-
-    // Compression tag
-    match decoder.get_tag_u32(Tag::Compression) {
-        Ok(comp) => {
-            let compression_method = CompressionMethod::from_u16(comp as u16)
-                .unwrap_or(CompressionMethod::Unknown(comp as u16));
-            println!("Compression: {:?}", compression_method);
-        }
-        _ => println!("Compression tag not found"),
-    };
-
     // Calculate number of tiles (rows and columns of tiles)
     let tiles_per_row = (image_width + tile_width - 1) / tile_width;
     let tiles_per_column = (image_height + tile_height - 1) / tile_height;
@@ -278,6 +267,11 @@ pub fn read_world_cover_tiff_file(
         Ok(file) => file,
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
     };
+
+    // let mut bitmap: GrayscaleBitmap = GrayscaleBitmap::new(
+    //     WORLD_COVER_BITMAP_SIZE as u16,
+    //     WORLD_COVER_BITMAP_SIZE as u16,
+    // );
 
     let mut reader = BufReader::new(file_for_image_data);
 
@@ -316,7 +310,7 @@ pub fn read_world_cover_tiff_file(
             }
 
             // Decompress the tile data
-            let decompressed_data =
+            let decompressed_tile_data =
                 match decompress_tile_data(&mut reader, tile_byte_count) {
                     Ok(data) => data,
                     Err(e) => {
@@ -327,23 +321,56 @@ pub fn read_world_cover_tiff_file(
                     }
                 };
 
+            let duration = start.elapsed();
+
             println!(
-                "Tile {}: Offset: {}, Byte Count: {}, Decompressed Size: {}",
+                "{:2?}: Tile {}: Offset: {}, Byte Count: {}, Decompressed Size: {}",
+                duration,
                 tile_index,
                 tile_offset,
                 tile_byte_count,
-                decompressed_data.len()
+                decompressed_tile_data.len()
             );
 
-            if decompressed_data.len() != tile_size_bytes as usize {
+            if decompressed_tile_data.len() != tile_size_bytes as usize {
                 return Err(format!(
                     "Decompressed data size does not match expected size: {}",
-                    decompressed_data.len()
+                    decompressed_tile_data.len()
                 ));
             }
 
-            // todo 0: fill the main array with the decompressed tile data
-        }
+            if tile_index > 10 {
+                panic!("stop");
+            }
+
+            // fill the main bitmap with the decompressed tile data
+            // let tile_x0 = (col * tile_width) as u16;
+            // let tile_y0 = (row * tile_height) as u16;
+            //
+            // for y in 0..tile_height {
+            //     for x in 0..tile_width {
+            //         let pixel_value =
+            //             decompressed_tile_data[(y * tile_width + x) as usize];
+            //
+            //         let abs_x = tile_x0 + x as u16;
+            //         let abs_y = tile_y0 + y as u16;
+            //
+            //         if abs_x < bitmap.width && abs_y < bitmap.height {
+            //             bitmap.set_pixel(abs_x, abs_y, pixel_value);
+            //         } else {
+            //             // these pixels are from edge tiles and reach beyond
+            //             // the main bitmap, so we skip them
+            //         }
+            //     }
+            // }
+        } // for col
+
+        // match bitmap.write_to_png("world_cover_tile.png") {
+        //     Ok(_) => println!("Tile written to world_cover_tile.png"),
+        //     Err(e) => {
+        //         return Err(format!("Failed to write tile to PNG: {}", e))
+        //     }
+        // }
     }
 
     Ok(())
@@ -355,10 +382,23 @@ mod tests {
         ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
         read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
     };
+
+    use dotenv::dotenv;
     use std::path::Path;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn initialize_logging() {
+        INIT.call_once(|| {
+            dotenv().ok();
+        });
+    }
 
     #[test]
     fn load_world_cover_tiff_tile() {
+        initialize_logging();
+
         let cache_dir = Path::new("cache");
 
         let result = ensure_geojson_file(cache_dir);
@@ -380,7 +420,6 @@ mod tests {
         assert!(files.len() > 100, "Too few files found in the GeoJSON.");
 
         let sample_tile_id: &DemTileId = &files[0];
-        println!("Example file: {:?}", files[0]);
         assert_eq!(
             world_cover_tile_download_url(sample_tile_id),
             "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/\

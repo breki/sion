@@ -18,6 +18,8 @@
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
@@ -30,6 +32,10 @@
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
@@ -51,6 +57,8 @@
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/src/water_bodies/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />

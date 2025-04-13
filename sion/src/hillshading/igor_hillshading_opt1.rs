@@ -64,7 +64,7 @@ pub fn hillshade(
                     .min(1.);
             let darkness_shade = (255.0 * darkness) as u8;
 
-            bitmap.set_pixel(x, y, darkness_shade);
+            bitmap.set_pixel(x as u16, y as u16, darkness_shade);
         }
     }
 }
