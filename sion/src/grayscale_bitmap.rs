@@ -18,6 +18,14 @@ impl GrayscaleBitmap {
         }
     }
 
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn data_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
+
     /// Gets the value of the pixel at the given coordinates.
     pub fn get_pixel(&self, x: u16, y: u16) -> u8 {
         if x >= self.width || y >= self.height {

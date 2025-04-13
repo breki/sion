@@ -1,3 +1,4 @@
+use crate::grayscale_bitmap::GrayscaleBitmap;
 use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
 use std::fs::File;
@@ -268,10 +269,10 @@ pub fn read_world_cover_tiff_file(
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
     };
 
-    // let mut bitmap: GrayscaleBitmap = GrayscaleBitmap::new(
-    //     WORLD_COVER_BITMAP_SIZE as u16,
-    //     WORLD_COVER_BITMAP_SIZE as u16,
-    // );
+    let mut world_cover_raster: GrayscaleBitmap = GrayscaleBitmap::new(
+        WORLD_COVER_BITMAP_SIZE as u16,
+        WORLD_COVER_BITMAP_SIZE as u16,
+    );
 
     let mut reader = BufReader::new(file_for_image_data);
 
@@ -339,14 +340,33 @@ pub fn read_world_cover_tiff_file(
                 ));
             }
 
-            if tile_index > 10 {
-                panic!("stop");
+            // fill the main raster with the decompressed tile data
+            let tile_x0 = (col * tile_width) as u16;
+            let tile_y0 = (row * tile_height) as u16;
+
+            let copy_width = tile_width
+                .min(world_cover_raster.width as u32 - tile_x0 as u32);
+            let copy_height = tile_height
+                .min(world_cover_raster.height as u32 - tile_y0 as u32);
+
+            for row in 0..copy_height {
+                let src_start = (row * tile_width) as usize;
+                let src_end = src_start + copy_width as usize;
+
+                let dest_start = (tile_y0 as usize + row as usize)
+                    * world_cover_raster.width as usize
+                    + tile_x0 as usize;
+                let dest_end = dest_start + copy_width as usize;
+
+                if let Some(dest_slice) =
+                    world_cover_raster.data_mut().get_mut(dest_start..dest_end)
+                {
+                    dest_slice.copy_from_slice(
+                        &decompressed_tile_data[src_start..src_end],
+                    );
+                }
             }
 
-            // fill the main bitmap with the decompressed tile data
-            // let tile_x0 = (col * tile_width) as u16;
-            // let tile_y0 = (row * tile_height) as u16;
-            //
             // for y in 0..tile_height {
             //     for x in 0..tile_width {
             //         let pixel_value =
@@ -355,8 +375,10 @@ pub fn read_world_cover_tiff_file(
             //         let abs_x = tile_x0 + x as u16;
             //         let abs_y = tile_y0 + y as u16;
             //
-            //         if abs_x < bitmap.width && abs_y < bitmap.height {
-            //             bitmap.set_pixel(abs_x, abs_y, pixel_value);
+            //         if abs_x < world_cover_raster.width
+            //             && abs_y < world_cover_raster.height
+            //         {
+            //             world_cover_raster.set_pixel(abs_x, abs_y, pixel_value);
             //         } else {
             //             // these pixels are from edge tiles and reach beyond
             //             // the main bitmap, so we skip them
