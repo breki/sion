@@ -2,6 +2,7 @@ use image::{GrayImage, Luma};
 
 /// Represents a 8-bit grayscale bitmap that can be used to draw on and then
 /// be sent to the display.
+#[derive(Debug)]
 pub struct GrayscaleBitmap {
     pub width: u16,
     pub height: u16,
@@ -47,6 +48,51 @@ impl GrayscaleBitmap {
             .and_then(|w| w.checked_add(y as u32))
             .expect("Overflow in pixel index calculation");
         self.data[index as usize] = value;
+    }
+
+    /// Extracts a sub-region of the bitmap as a new `GrayscaleBitmap`.
+    ///
+    /// # Arguments
+    ///
+    /// * `x` - The x-coordinate of the top-left corner of the region.
+    /// * `y` - The y-coordinate of the top-left corner of the region.
+    /// * `width` - The width of the region to extract.
+    /// * `height` - The height of the region to extract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the specified region is out of bounds.
+    pub fn extract(
+        &self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+    ) -> GrayscaleBitmap {
+        if x + width > self.width || y + height > self.height {
+            panic!("Extract region is out of bounds");
+        }
+
+        let mut extracted_data =
+            vec![0; (width as usize) * (height as usize)].into_boxed_slice();
+
+        for row in 0..height {
+            let src_start =
+                (y + row) as usize * self.width as usize + x as usize;
+            let src_end = src_start + width as usize;
+
+            let dest_start = row as usize * width as usize;
+            let dest_end = dest_start + width as usize;
+
+            extracted_data[dest_start..dest_end]
+                .copy_from_slice(&self.data[src_start..src_end]);
+        }
+
+        GrayscaleBitmap {
+            width,
+            height,
+            data: extracted_data,
+        }
     }
 
     /// Writes the grayscale bitmap to a PNG file.

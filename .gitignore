@@ -21,5 +21,6 @@ target/
 #.idea/
 
 sion/cache/
+sion/output
 
 *.env

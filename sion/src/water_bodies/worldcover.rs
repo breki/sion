@@ -185,7 +185,7 @@ fn decompress_tile_data(
 
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
-) -> Result<(), String> {
+) -> Result<GrayscaleBitmap, String> {
     let start = Instant::now();
 
     let file = match File::open(&world_cover_tiff_file_name) {
@@ -395,7 +395,7 @@ pub fn read_world_cover_tiff_file(
         // }
     }
 
-    Ok(())
+    Ok(world_cover_raster)
 }
 
 #[cfg(test)]
@@ -459,5 +459,19 @@ mod tests {
             "Error: {:?}",
             tile_reading_result.unwrap_err()
         );
+
+        // extract the XYWH 14005, 18354, 1291, 1033 portion of the bitmap and save it to PNG
+        let bitmap = tile_reading_result.unwrap();
+        let sample_extract = bitmap.extract(14005, 18354, 1291, 1033);
+
+        // ensure output dir exists
+        let output_dir = Path::new("output");
+        if !output_dir.exists() {
+            std::fs::create_dir_all(output_dir).unwrap();
+        }
+
+        let result =
+            sample_extract.write_to_png("output/world_cover_tile_extract.png");
+        assert!(result.is_ok(), "Error: {:?}", result.unwrap_err());
     }
 }
