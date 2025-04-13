@@ -62,6 +62,8 @@
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/cache" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/output" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
     </content>
     <orderEntry type="inheritedJdk" />

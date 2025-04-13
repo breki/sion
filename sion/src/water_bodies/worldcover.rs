@@ -21,10 +21,12 @@ const WORLD_COVER_YEAR: &str = "2021";
 
 const WORLD_COVER_CACHE_DIR: &str = "WorldCover";
 
-const WORLD_COVER_TILE_SIZE: u32 = 12000;
-const WORLD_COVER_TILES_IN_BATCH: u32 = 3;
-const WORLD_COVER_BITMAP_SIZE: u32 =
+const WORLD_COVER_TILE_SIZE: u16 = 12000;
+const WORLD_COVER_TILES_IN_BATCH: u16 = 3;
+const WORLD_COVER_BITMAP_SIZE: u16 =
     WORLD_COVER_TILE_SIZE * WORLD_COVER_TILES_IN_BATCH;
+
+// const WATER_BODY_TILE_SIZE: u16 = 1800;
 
 fn geojson_url() -> String {
     format!("{}/esa_worldcover_grid.geojson", WORLD_COVER_S3_DOMAIN)
@@ -183,9 +185,10 @@ fn decompress_tile_data(
     Ok(decompressed_data)
 }
 
+// todo 2: return a 16-bit "bitmap" so we can store coloring of water bodies.
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
-) -> Result<GrayscaleBitmap, String> {
+) -> Result<Vec<Vec<GrayscaleBitmap>>, String> {
     let start = Instant::now();
 
     let file = match File::open(&world_cover_tiff_file_name) {
@@ -204,8 +207,8 @@ pub fn read_world_cover_tiff_file(
         Err(e) => return Err(format!("Failed to get TIFF dimensions: {}", e)),
     };
 
-    if image_width != WORLD_COVER_BITMAP_SIZE
-        || image_height != WORLD_COVER_BITMAP_SIZE
+    if image_width != WORLD_COVER_BITMAP_SIZE as u32
+        || image_height != WORLD_COVER_BITMAP_SIZE as u32
     {
         return Err(format!(
             "Expected dimensions {}x{}, but got {}x{}",
@@ -261,23 +264,31 @@ pub fn read_world_cover_tiff_file(
     let tiles_per_row = (image_width + tile_width - 1) / tile_width;
     let tiles_per_column = (image_height + tile_height - 1) / tile_height;
 
-    // let mut _all_tiles_data: Vec<u8> =
-    //     Vec::with_capacity((image_width * image_height) as usize);
-
     let file_for_image_data = match File::open(&world_cover_tiff_file_name) {
         Ok(file) => file,
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
     };
 
-    let mut world_cover_raster: GrayscaleBitmap = GrayscaleBitmap::new(
-        WORLD_COVER_BITMAP_SIZE as u16,
-        WORLD_COVER_BITMAP_SIZE as u16,
-    );
+    // create a 3x3 2D Vec of bitmaps
+    let mut water_bodies_tiles: Vec<Vec<GrayscaleBitmap>> = Vec::new();
+
+    for _ in 0..WORLD_COVER_TILES_IN_BATCH {
+        let mut row: Vec<GrayscaleBitmap> = Vec::new();
+        for _ in 0..WORLD_COVER_TILES_IN_BATCH {
+            row.push(GrayscaleBitmap::new(
+                WORLD_COVER_TILE_SIZE,
+                WORLD_COVER_TILE_SIZE,
+            ));
+        }
+        water_bodies_tiles.push(row);
+    }
 
     let mut reader = BufReader::new(file_for_image_data);
 
     // Loop over each tile and decompress it
     for row in 0..tiles_per_column {
+        let tile_y0 = (row * tile_height) as u16;
+
         for col in 0..tiles_per_row {
             // Get the index of the tile
             let tile_index = (row * tiles_per_row + col) as usize;
@@ -340,62 +351,48 @@ pub fn read_world_cover_tiff_file(
                 ));
             }
 
-            // fill the main raster with the decompressed tile data
+            // fill the main bitmap with the decompressed tile data
             let tile_x0 = (col * tile_width) as u16;
-            let tile_y0 = (row * tile_height) as u16;
 
-            let copy_width = tile_width
-                .min(world_cover_raster.width as u32 - tile_x0 as u32);
-            let copy_height = tile_height
-                .min(world_cover_raster.height as u32 - tile_y0 as u32);
+            for y in 0..tile_height {
+                let abs_y = tile_y0 + y as u16;
+                let tile_row = abs_y / WORLD_COVER_TILE_SIZE;
 
-            for row in 0..copy_height {
-                let src_start = (row * tile_width) as usize;
-                let src_end = src_start + copy_width as usize;
+                if tile_row < WORLD_COVER_TILES_IN_BATCH {
+                    for x in 0..tile_width {
+                        let pixel_value = decompressed_tile_data
+                            [(y * tile_width + x) as usize];
 
-                let dest_start = (tile_y0 as usize + row as usize)
-                    * world_cover_raster.width as usize
-                    + tile_x0 as usize;
-                let dest_end = dest_start + copy_width as usize;
+                        let abs_x = tile_x0 + x as u16;
 
-                if let Some(dest_slice) =
-                    world_cover_raster.data_mut().get_mut(dest_start..dest_end)
-                {
-                    dest_slice.copy_from_slice(
-                        &decompressed_tile_data[src_start..src_end],
-                    );
+                        // determine which water bodies tile this pixel belongs to
+                        let tile_col = abs_x / WORLD_COVER_TILE_SIZE;
+
+                        if tile_col < WORLD_COVER_TILES_IN_BATCH {
+                            let tile = &mut water_bodies_tiles
+                                [tile_row as usize]
+                                [tile_col as usize];
+
+                            // calculate the tile-local coordinates
+                            let local_x = abs_x % WORLD_COVER_TILE_SIZE;
+                            let local_y = abs_y % WORLD_COVER_TILE_SIZE;
+
+                            if local_x < WORLD_COVER_TILE_SIZE
+                                && local_y < WORLD_COVER_TILE_SIZE
+                            {
+                                tile.set_pixel(local_x, local_y, pixel_value);
+                            } else {
+                                // these pixels are from edge tiles and reach beyond
+                                // the main bitmap, so we skip them
+                            }
+                        }
+                    }
                 }
             }
-
-            // for y in 0..tile_height {
-            //     for x in 0..tile_width {
-            //         let pixel_value =
-            //             decompressed_tile_data[(y * tile_width + x) as usize];
-            //
-            //         let abs_x = tile_x0 + x as u16;
-            //         let abs_y = tile_y0 + y as u16;
-            //
-            //         if abs_x < world_cover_raster.width
-            //             && abs_y < world_cover_raster.height
-            //         {
-            //             world_cover_raster.set_pixel(abs_x, abs_y, pixel_value);
-            //         } else {
-            //             // these pixels are from edge tiles and reach beyond
-            //             // the main bitmap, so we skip them
-            //         }
-            //     }
-            // }
         } // for col
-
-        // match bitmap.write_to_png("world_cover_tile.png") {
-        //     Ok(_) => println!("Tile written to world_cover_tile.png"),
-        //     Err(e) => {
-        //         return Err(format!("Failed to write tile to PNG: {}", e))
-        //     }
-        // }
     }
 
-    Ok(world_cover_raster)
+    Ok(water_bodies_tiles)
 }
 
 #[cfg(test)]
@@ -418,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn load_world_cover_tiff_tile() {
+    fn load_world_cover_tiff_file() {
         initialize_logging();
 
         let cache_dir = Path::new("cache");
@@ -451,27 +448,18 @@ mod tests {
         assert!(tile_result.is_ok(), "Error: {:?}", tile_result.unwrap_err());
 
         let tile_path = tile_result.unwrap();
-        let tile_reading_result =
+        let tiff_file_reading_result =
             read_world_cover_tiff_file(tile_path.as_path());
 
         assert!(
-            tile_reading_result.is_ok(),
+            tiff_file_reading_result.is_ok(),
             "Error: {:?}",
-            tile_reading_result.unwrap_err()
+            tiff_file_reading_result.unwrap_err()
         );
 
-        // extract the XYWH 14005, 18354, 1291, 1033 portion of the bitmap and save it to PNG
-        let bitmap = tile_reading_result.unwrap();
-        let sample_extract = bitmap.extract(14005, 18354, 1291, 1033);
+        let world_cover_tiles = tiff_file_reading_result.unwrap();
 
-        // ensure output dir exists
-        let output_dir = Path::new("output");
-        if !output_dir.exists() {
-            std::fs::create_dir_all(output_dir).unwrap();
-        }
-
-        let result =
-            sample_extract.write_to_png("output/world_cover_tile_extract.png");
-        assert!(result.is_ok(), "Error: {:?}", result.unwrap_err());
+        assert_eq!(world_cover_tiles.len(), 3);
+        assert_eq!(world_cover_tiles[0].len(), 3);
     }
 }

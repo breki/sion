@@ -6,7 +6,7 @@ use std::f32::consts::FRAC_PI_2;
 use std::fs::File;
 use std::io::Write;
 
-// todo 0: instead of using DEM data to fetch the slope and aspect values,
+// todo: instead of using DEM data to fetch the slope and aspect values,
 //    simply generate ones for a given lookup table resolution - use the other
 //    way around - from the degree value to the original value?
 
