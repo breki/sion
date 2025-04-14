@@ -3,16 +3,16 @@ use image::{GrayImage, Luma};
 /// Represents a 8-bit grayscale bitmap that can be used to draw on and then
 /// be sent to the display.
 #[derive(Debug)]
-pub struct GrayscaleBitmap {
+pub struct Grayscale8Bitmap {
     pub width: u16,
     pub height: u16,
     data: Box<[u8]>,
 }
 
-impl GrayscaleBitmap {
+impl Grayscale8Bitmap {
     /// Creates a new empty grayscale bitmap with the given width and height.
-    pub fn new(width: u16, height: u16) -> GrayscaleBitmap {
-        GrayscaleBitmap {
+    pub fn new(width: u16, height: u16) -> Grayscale8Bitmap {
+        Grayscale8Bitmap {
             width,
             height,
             data: vec![0; width as usize * height as usize].into_boxed_slice(),
@@ -68,7 +68,7 @@ impl GrayscaleBitmap {
         y: u16,
         width: u16,
         height: u16,
-    ) -> GrayscaleBitmap {
+    ) -> Grayscale8Bitmap {
         if x + width > self.width || y + height > self.height {
             panic!("Extract region is out of bounds");
         }
@@ -88,7 +88,7 @@ impl GrayscaleBitmap {
                 .copy_from_slice(&self.data[src_start..src_end]);
         }
 
-        GrayscaleBitmap {
+        Grayscale8Bitmap {
             width,
             height,
             data: extracted_data,
@@ -117,11 +117,11 @@ impl GrayscaleBitmap {
 
 #[cfg(test)]
 mod tests {
-    use super::GrayscaleBitmap;
+    use super::Grayscale8Bitmap;
 
     #[test]
     fn create_large_bitmap() {
-        let bitmap = GrayscaleBitmap::new(1000, 1000);
+        let bitmap = Grayscale8Bitmap::new(1000, 1000);
         assert_eq!(bitmap.width, 1000);
         assert_eq!(bitmap.height, 1000);
         assert_eq!(bitmap.data.len(), 1000 * 1000);
@@ -130,7 +130,7 @@ mod tests {
     /// A new bitmap is created with the correct dimensions and properties.
     #[test]
     fn create_bitmap() {
-        let bitmap = GrayscaleBitmap::new(10, 15);
+        let bitmap = Grayscale8Bitmap::new(10, 15);
         assert_eq!(bitmap.width, 10);
         assert_eq!(bitmap.height, 15);
         assert_eq!(bitmap.data.len(), 150);
@@ -139,7 +139,7 @@ mod tests {
     /// The pixels are black by default when the bitmap is created.
     #[test]
     fn pixels_are_black_by_default() {
-        let bitmap = GrayscaleBitmap::new(10, 15);
+        let bitmap = Grayscale8Bitmap::new(10, 15);
         assert_eq!(bitmap.get_pixel(0, 0), 0);
         assert_eq!(bitmap.get_pixel(4, 5), 0);
     }
@@ -147,7 +147,7 @@ mod tests {
     /// Pixels can be set and then retrieved.
     #[test]
     fn set_and_get_pixel() {
-        let mut bitmap = GrayscaleBitmap::new(10, 15);
+        let mut bitmap = Grayscale8Bitmap::new(10, 15);
         bitmap.set_pixel(3, 4, 123);
         assert_eq!(bitmap.get_pixel(3, 4), 123);
         bitmap.set_pixel(3, 4, 255);
@@ -159,7 +159,7 @@ mod tests {
     fn write_to_png() {
         let width = 100;
         let height = 150;
-        let mut bitmap = GrayscaleBitmap::new(width, height);
+        let mut bitmap = Grayscale8Bitmap::new(width, height);
         for y in 0..height {
             for x in 0..width {
                 bitmap.set_pixel(x, y, ((x + y) * 5) as u8);

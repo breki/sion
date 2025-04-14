@@ -1,4 +1,4 @@
-use crate::grayscale_bitmap::GrayscaleBitmap;
+use crate::grayscale8_bitmap::Grayscale8Bitmap;
 use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
 use std::fs::File;
@@ -188,7 +188,7 @@ fn decompress_tile_data(
 // todo 2: return a 16-bit "bitmap" so we can store coloring of water bodies.
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
-) -> Result<Vec<Vec<GrayscaleBitmap>>, String> {
+) -> Result<Vec<Vec<Grayscale8Bitmap>>, String> {
     let start = Instant::now();
 
     let file = match File::open(&world_cover_tiff_file_name) {
@@ -270,12 +270,12 @@ pub fn read_world_cover_tiff_file(
     };
 
     // create a 3x3 2D Vec of bitmaps
-    let mut water_bodies_tiles: Vec<Vec<GrayscaleBitmap>> = Vec::new();
+    let mut water_bodies_tiles: Vec<Vec<Grayscale8Bitmap>> = Vec::new();
 
     for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-        let mut row: Vec<GrayscaleBitmap> = Vec::new();
+        let mut row: Vec<Grayscale8Bitmap> = Vec::new();
         for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-            row.push(GrayscaleBitmap::new(
+            row.push(Grayscale8Bitmap::new(
                 WORLD_COVER_TILE_SIZE,
                 WORLD_COVER_TILE_SIZE,
             ));

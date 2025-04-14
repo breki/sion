@@ -1,7 +1,7 @@
 use crate::consts::EARTH_CIRCUMFERENCE_METERS;
 use crate::dem_tile::DemTile;
 use crate::geo::{difference_between_angles, normalize_angle};
-use crate::grayscale_bitmap::GrayscaleBitmap;
+use crate::grayscale8_bitmap::Grayscale8Bitmap;
 use crate::hillshading::parameters::HillshadingParameters;
 use crate::trig::deg_to_rad;
 use std::f32::consts::{FRAC_PI_2, PI};
@@ -52,7 +52,7 @@ pub fn calculate_slope_and_aspect(p: f32, q: f32) -> (f32, f32) {
 pub fn hillshade(
     dem: &DemTile,
     parameters: &HillshadingParameters,
-    bitmap: &mut GrayscaleBitmap,
+    bitmap: &mut Grayscale8Bitmap,
 ) {
     if bitmap.width as usize != dem.size || bitmap.height as usize != dem.size {
         panic!("bitmap size does not match DEM size");
@@ -103,12 +103,13 @@ pub fn hillshade(
 mod tests {
     use super::*;
     use crate::dem_tile::DemTile;
-    use crate::grayscale_bitmap::GrayscaleBitmap;
+    use crate::grayscale8_bitmap::Grayscale8Bitmap;
 
     #[test]
     fn hillshade_of_whole_dem() {
         let dem = DemTile::from_hgt_file("tests/data/N46E006.hgt");
-        let mut bitmap = GrayscaleBitmap::new(dem.size as u16, dem.size as u16);
+        let mut bitmap =
+            Grayscale8Bitmap::new(dem.size as u16, dem.size as u16);
         let parameters = HillshadingParameters::default();
         hillshade(&dem, &parameters, &mut bitmap);
 
