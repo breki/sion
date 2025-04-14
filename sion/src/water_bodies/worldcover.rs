@@ -26,7 +26,13 @@ const WORLD_COVER_TILES_IN_BATCH: u16 = 3;
 const WORLD_COVER_BITMAP_SIZE: u16 =
     WORLD_COVER_TILE_SIZE * WORLD_COVER_TILES_IN_BATCH;
 
-// const WATER_BODY_TILE_SIZE: u16 = 1800;
+const WATER_BODY_TILE_SIZE: u16 = 1800;
+
+enum WaterBodyValue {
+    NoData = 0,
+    NonWater = 1,
+    Water = 2,
+}
 
 fn geojson_url() -> String {
     format!("{}/esa_worldcover_grid.geojson", WORLD_COVER_S3_DOMAIN)
@@ -382,9 +388,9 @@ pub fn read_world_cover_tiff_file(
                                 // the pixel value should be 0 for no data (/unknown),
                                 // 1 for non-water, 2 for water
                                 let water_body_pixel_value = match pixel_value {
-                                    255 => 0,
-                                    80 => 2,
-                                    _ => 1,
+                                    255 => WaterBodyValue::NoData,
+                                    80 => WaterBodyValue::Water,
+                                    _ => WaterBodyValue::NonWater,
                                 };
 
                                 tile.set_pixel(
@@ -406,10 +412,81 @@ pub fn read_world_cover_tiff_file(
     Ok(water_bodies_tiles)
 }
 
+/// Downsamples the `Raster16` to the specified width and height.
+///
+/// # Arguments
+///
+/// * `new_width` - The width of the downsampled raster.
+/// * `new_height` - The height of the downsampled raster.
+///
+/// # Returns
+///
+/// A new `Raster16` with the specified dimensions.
+///
+/// # Panics
+///
+/// Panics if `new_width` or `new_height` is zero.
+pub fn downsample_world_cover_tile(raster: &Raster16) -> Raster16 {
+    let mut downsampled =
+        Raster16::new(WATER_BODY_TILE_SIZE, WATER_BODY_TILE_SIZE);
+
+    let x_ratio = raster.width as f32 / WATER_BODY_TILE_SIZE as f32;
+    let y_ratio = raster.height as f32 / WATER_BODY_TILE_SIZE as f32;
+
+    for y in 0..WATER_BODY_TILE_SIZE {
+        for x in 0..WATER_BODY_TILE_SIZE {
+            let src_x_start = x as f32 * x_ratio;
+            let src_x_end = (x + 1) as f32 * x_ratio;
+            let src_y_start = y as f32 * y_ratio;
+            let src_y_end = (y + 1) as f32 * y_ratio;
+
+            // Assuming 3 possible water body values
+            let mut color_weights = [0.0; 3];
+
+            for src_y in src_y_start.floor() as usize..src_y_end.ceil() as usize
+            {
+                for src_x in
+                    src_x_start.floor() as usize..src_x_end.ceil() as usize
+                {
+                    if src_x < raster.width as usize
+                        && src_y < raster.height as usize
+                    {
+                        let overlap_x = (src_x_end.min((src_x + 1) as f32)
+                            - src_x_start.max(src_x as f32))
+                        .max(0.0);
+                        let overlap_y = (src_y_end.min((src_y + 1) as f32)
+                            - src_y_start.max(src_y as f32))
+                        .max(0.0);
+                        let overlap_area = overlap_x * overlap_y;
+
+                        let color =
+                            raster.get_pixel(src_x as u16, src_y as u16);
+                        if color < 3 {
+                            color_weights[color as usize] += overlap_area;
+                        }
+                    }
+                }
+            }
+
+            let dominant_color = color_weights
+                .iter()
+                .enumerate()
+                .max_by(|&(_, a), &(_, b)| a.partial_cmp(b).unwrap())
+                .map(|(color, _)| color as u16)
+                .unwrap_or(0);
+
+            downsampled.set_pixel(x, y, dominant_color);
+        }
+    }
+
+    downsampled
+}
+
 #[cfg(test)]
 mod tests {
     use crate::water_bodies::worldcover::{
-        ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
+        downsample_world_cover_tile, ensure_geojson_file,
+        ensure_world_cover_tile, list_all_available_files,
         read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
     };
 
@@ -472,5 +549,19 @@ mod tests {
 
         assert_eq!(world_cover_tiles.len(), 3);
         assert_eq!(world_cover_tiles[0].len(), 3);
+
+        // downsample the tiles to the WATER_BODY_TILE_SIZE
+        let mut i = 0;
+        for tile_row in &world_cover_tiles {
+            for tile in tile_row {
+                let downsampled_tile = downsample_world_cover_tile(&tile);
+                // todo 0: expose the water bodies processing tile as a new type
+                // todo 2: write the downsampled tiles in a new format
+                downsampled_tile
+                    .write_to_png(format!("output/tile{}.png", i).as_str())
+                    .unwrap();
+                i += 1;
+            }
+        }
     }
 }

@@ -1,4 +1,4 @@
-use image::{ImageBuffer, Luma};
+use image::{GrayImage, Luma};
 
 /// Represents a 16-bit raster.
 #[derive(Debug)]
@@ -47,12 +47,11 @@ impl Raster16 {
         &self,
         file_path: &str,
     ) -> Result<(), image::ImageError> {
-        let mut img: ImageBuffer<Luma<u16>, Vec<u16>> =
-            ImageBuffer::new(self.width.into(), self.height.into());
+        let mut img = GrayImage::new(self.width.into(), self.height.into());
         for y in 0..self.height {
             for x in 0..self.width {
                 let pixel_value = self.get_pixel(x, y);
-                img.put_pixel(x.into(), y.into(), Luma([pixel_value]));
+                img.put_pixel(x.into(), y.into(), Luma([pixel_value as u8]));
             }
         }
         img.save(file_path)
