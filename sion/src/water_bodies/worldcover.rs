@@ -1,4 +1,4 @@
-use crate::grayscale8_bitmap::Grayscale8Bitmap;
+use crate::raster16::Raster16;
 use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
 use std::fs::File;
@@ -185,10 +185,9 @@ fn decompress_tile_data(
     Ok(decompressed_data)
 }
 
-// todo 2: return a 16-bit "bitmap" so we can store coloring of water bodies.
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
-) -> Result<Vec<Vec<Grayscale8Bitmap>>, String> {
+) -> Result<Vec<Vec<Raster16>>, String> {
     let start = Instant::now();
 
     let file = match File::open(&world_cover_tiff_file_name) {
@@ -270,12 +269,12 @@ pub fn read_world_cover_tiff_file(
     };
 
     // create a 3x3 2D Vec of bitmaps
-    let mut water_bodies_tiles: Vec<Vec<Grayscale8Bitmap>> = Vec::new();
+    let mut water_bodies_tiles: Vec<Vec<Raster16>> = Vec::new();
 
     for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-        let mut row: Vec<Grayscale8Bitmap> = Vec::new();
+        let mut row: Vec<Raster16> = Vec::new();
         for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-            row.push(Grayscale8Bitmap::new(
+            row.push(Raster16::new(
                 WORLD_COVER_TILE_SIZE,
                 WORLD_COVER_TILE_SIZE,
             ));
@@ -360,9 +359,6 @@ pub fn read_world_cover_tiff_file(
 
                 if tile_row < WORLD_COVER_TILES_IN_BATCH {
                     for x in 0..tile_width {
-                        let pixel_value = decompressed_tile_data
-                            [(y * tile_width + x) as usize];
-
                         let abs_x = tile_x0 + x as u16;
 
                         // determine which water bodies tile this pixel belongs to
@@ -380,7 +376,22 @@ pub fn read_world_cover_tiff_file(
                             if local_x < WORLD_COVER_TILE_SIZE
                                 && local_y < WORLD_COVER_TILE_SIZE
                             {
-                                tile.set_pixel(local_x, local_y, pixel_value);
+                                let pixel_value = decompressed_tile_data
+                                    [(y * tile_width + x) as usize];
+
+                                // the pixel value should be 0 for no data (/unknown),
+                                // 1 for non-water, 2 for water
+                                let water_body_pixel_value = match pixel_value {
+                                    255 => 0,
+                                    80 => 2,
+                                    _ => 1,
+                                };
+
+                                tile.set_pixel(
+                                    local_x,
+                                    local_y,
+                                    water_body_pixel_value as u16,
+                                );
                             } else {
                                 // these pixels are from edge tiles and reach beyond
                                 // the main bitmap, so we skip them
