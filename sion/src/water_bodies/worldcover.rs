@@ -1,15 +1,61 @@
 use crate::raster16::Raster16;
 use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
+use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, Seek, SeekFrom};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tiff::decoder::Decoder;
 use tiff::tags::{PlanarConfiguration, Tag};
 
-type DemTileId = String;
+// todo 0: move stuff into their own modules
+
+#[derive(Copy, Clone, Debug)]
+pub struct DemTileId {
+    pub lon: i16,
+    pub lat: i16,
+}
+
+impl DemTileId {
+    pub fn new(lon: i16, lat: i16) -> Self {
+        DemTileId { lon, lat }
+    }
+
+    // parses file names like "S54E168", taking into account N-S and E-W
+    pub fn from_tile_name(tile_name: &str) -> Result<DemTileId, String> {
+        if tile_name.len() != 7 {
+            return Err(format!("Invalid tile ID length: {}", tile_name));
+        }
+
+        let lat = tile_name[1..3]
+            .parse::<i16>()
+            .map_err(|e| format!("Failed to parse latitude: {}", e))?;
+        let lon = tile_name[4..7]
+            .parse::<i16>()
+            .map_err(|e| format!("Failed to parse longitude: {}", e))?;
+
+        // Adjust the sign of the coordinates based on the hemisphere
+        let lon = if &tile_name[3..4] == "E" { lon } else { -lon };
+        let lat = if &tile_name[0..1] == "N" { lat } else { -lat };
+
+        Ok(DemTileId { lon, lat })
+    }
+}
+
+impl fmt::Display for DemTileId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}{}{}{}",
+            if self.lat >= 0 { 'N' } else { 'S' },
+            self.lat.abs(),
+            if self.lon >= 0 { 'E' } else { 'W' },
+            self.lon.abs()
+        )
+    }
+}
 
 type _HeightsArray = Vec<i16>; // Replace with your actual HeightsArray type.
 
@@ -32,6 +78,41 @@ enum WaterBodyValue {
     NoData = 0,
     NonWater = 1,
     Water = 2,
+}
+
+pub struct WaterBodiesProcessingTile {
+    pub tile_id: DemTileId,
+    data: Vec<Vec<u16>>,
+}
+
+impl WaterBodiesProcessingTile {
+    pub fn new(tile_id: &DemTileId) -> Self {
+        WaterBodiesProcessingTile {
+            tile_id: tile_id.clone(),
+            data: vec![
+                vec![0; WATER_BODY_TILE_SIZE as usize];
+                WATER_BODY_TILE_SIZE as usize
+            ],
+        }
+    }
+
+    pub fn set_pixel(&mut self, x: u16, y: u16, value: u16) {
+        if x >= WATER_BODY_TILE_SIZE || y >= WATER_BODY_TILE_SIZE {
+            panic!("Pixel coordinates out of bounds");
+        }
+
+        self.data[y as usize][x as usize] = value;
+    }
+
+    pub fn write_to_file(&self, file_name: &Path) -> Result<(), io::Error> {
+        let mut file = File::create(file_name)?;
+        for row in &self.data {
+            for &value in row {
+                file.write_all(&value.to_le_bytes())?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn geojson_url() -> String {
@@ -166,6 +247,11 @@ fn list_all_available_files(
                 })
                 .and_then(|ll_tile| ll_tile.as_str())
                 .map(|tile_name| tile_name.to_string())
+                .map(|tile_name| {
+                    DemTileId::from_tile_name(&tile_name).unwrap_or_else(|_| {
+                        panic!("Failed to parse tile name: {}", tile_name)
+                    })
+                })
         })
         .collect();
 
@@ -412,23 +498,11 @@ pub fn read_world_cover_tiff_file(
     Ok(water_bodies_tiles)
 }
 
-/// Downsamples the `Raster16` to the specified width and height.
-///
-/// # Arguments
-///
-/// * `new_width` - The width of the downsampled raster.
-/// * `new_height` - The height of the downsampled raster.
-///
-/// # Returns
-///
-/// A new `Raster16` with the specified dimensions.
-///
-/// # Panics
-///
-/// Panics if `new_width` or `new_height` is zero.
-pub fn downsample_world_cover_tile(raster: &Raster16) -> Raster16 {
-    let mut downsampled =
-        Raster16::new(WATER_BODY_TILE_SIZE, WATER_BODY_TILE_SIZE);
+pub fn downsample_to_water_bodies_tile(
+    tile_id: &DemTileId,
+    raster: &Raster16,
+) -> WaterBodiesProcessingTile {
+    let mut downsampled = WaterBodiesProcessingTile::new(tile_id);
 
     let x_ratio = raster.width as f32 / WATER_BODY_TILE_SIZE as f32;
     let y_ratio = raster.height as f32 / WATER_BODY_TILE_SIZE as f32;
@@ -485,9 +559,10 @@ pub fn downsample_world_cover_tile(raster: &Raster16) -> Raster16 {
 #[cfg(test)]
 mod tests {
     use crate::water_bodies::worldcover::{
-        downsample_world_cover_tile, ensure_geojson_file,
+        downsample_to_water_bodies_tile, ensure_geojson_file,
         ensure_world_cover_tile, list_all_available_files,
         read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
+        WORLD_COVER_CACHE_DIR,
     };
 
     use dotenv::dotenv;
@@ -502,6 +577,30 @@ mod tests {
         });
     }
 
+    #[test]
+    fn parsing_and_formatting_tile_ids() {
+        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+        assert_eq!(tile_id.lon, 168);
+        assert_eq!(tile_id.lat, 54);
+        assert_eq!(tile_id.to_string(), "N54E168");
+
+        let tile_id = DemTileId::from_tile_name("S54W168").unwrap();
+        assert_eq!(tile_id.lon, -168);
+        assert_eq!(tile_id.lat, -54);
+        assert_eq!(tile_id.to_string(), "S54W168");
+
+        let tile_id = DemTileId::from_tile_name("N54W168").unwrap();
+        assert_eq!(tile_id.lon, -168);
+        assert_eq!(tile_id.lat, 54);
+        assert_eq!(tile_id.to_string(), "N54W168");
+
+        let tile_id = DemTileId::from_tile_name("S54E168").unwrap();
+        assert_eq!(tile_id.lon, 168);
+        assert_eq!(tile_id.lat, -54);
+        assert_eq!(tile_id.to_string(), "S54E168");
+    }
+
+    // todo 5: extract the water bodies tiles generation logic into a separate function
     #[test]
     fn load_world_cover_tiff_file() {
         initialize_logging();
@@ -550,17 +649,30 @@ mod tests {
         assert_eq!(world_cover_tiles.len(), 3);
         assert_eq!(world_cover_tiles[0].len(), 3);
 
+        let processing_dir =
+            cache_dir.join(WORLD_COVER_CACHE_DIR).join("processing");
+
+        if !processing_dir.exists() {
+            std::fs::create_dir_all(&processing_dir).unwrap();
+        }
+
         // downsample the tiles to the WATER_BODY_TILE_SIZE
-        let mut i = 0;
-        for tile_row in &world_cover_tiles {
-            for tile in tile_row {
-                let downsampled_tile = downsample_world_cover_tile(&tile);
-                // todo 0: expose the water bodies processing tile as a new type
-                // todo 2: write the downsampled tiles in a new format
-                downsampled_tile
-                    .write_to_png(format!("output/tile{}.png", i).as_str())
-                    .unwrap();
-                i += 1;
+        for row in 0..world_cover_tiles.len() {
+            for col in 0..world_cover_tiles[row].len() {
+                let tile = &world_cover_tiles[row][col];
+
+                let tile_id = DemTileId::new(
+                    sample_tile_id.lon + col as i16,
+                    sample_tile_id.lat + row as i16,
+                );
+                let downsampled_tile =
+                    downsample_to_water_bodies_tile(&tile_id, &tile);
+
+                let tile_file_name = processing_dir
+                    .join(downsampled_tile.tile_id.to_string())
+                    .with_extension("wbp");
+
+                downsampled_tile.write_to_file(&tile_file_name).unwrap();
             }
         }
     }
