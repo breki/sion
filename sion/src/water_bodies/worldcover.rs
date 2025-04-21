@@ -1,13 +1,13 @@
 use crate::raster16::Raster16;
+use crate::water_bodies::caching::ensure_file_in_cache;
 use crate::water_bodies::dem_tile_id::DemTileId;
 use crate::water_bodies::water_bodies::WaterBodyValue;
 use flate2::read::ZlibDecoder;
 use serde_json::{Map, Value};
 use std::fs::File;
+use std::io::Read;
 use std::io::{self, BufReader, Seek, SeekFrom};
-use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 use tiff::decoder::Decoder;
 use tiff::tags::{PlanarConfiguration, Tag};
 
@@ -42,70 +42,14 @@ fn world_cover_tile_download_url(tile_id: &DemTileId) -> String {
     )
 }
 
-/// Ensure that the file is in the cache directory. If it is not, download it
-/// from the given URL and save it to the specified path in the cache directory.
-fn ensure_file_in_cache(
-    url: &str,
-    cached_file_name: &Path,
-) -> Result<PathBuf, String> {
-    if cached_file_name.exists() {
-        Ok(cached_file_name.to_path_buf())
-    } else {
-        let response = match reqwest::blocking::get(url) {
-            Ok(response) => response,
-            Err(e) => {
-                return Err(format!("Failed to download the file: {}", e))
-            }
-        };
-
-        // if the cache directory does not exist, create it
-        if let Some(parent) = cached_file_name.parent() {
-            if !parent.exists() {
-                if let Err(e) = std::fs::create_dir_all(parent) {
-                    return Err(format!(
-                        "Failed to create cache directory: {}",
-                        e
-                    ));
-                }
-            }
-        }
-
-        let mut file = match File::create(&cached_file_name) {
-            Ok(file) => file,
-            Err(e) => {
-                return Err(format!(
-                    "Failed to create the file in the cache: {}",
-                    e
-                ))
-            }
-        };
-
-        let bytes = match response.bytes() {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                return Err(format!("Failed to read response bytes: {}", e))
-            }
-        };
-
-        let mut cursor = Cursor::new(bytes);
-
-        match std::io::copy(&mut cursor, &mut file) {
-            Ok(_) => Ok(cached_file_name.to_path_buf()),
-            Err(e) => {
-                Err(format!("Failed to write the file in the cache: {}", e))
-            }
-        }
-    }
-}
-
-fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
+pub fn ensure_geojson_file(cache_dir: &Path) -> Result<PathBuf, String> {
     let cached_file_name = cache_dir
         .join(WORLD_COVER_CACHE_DIR)
         .join("esa_worldcover_2020_grid.geojson");
     ensure_file_in_cache(&geojson_url(), &cached_file_name)
 }
 
-fn ensure_world_cover_tile(
+pub fn ensure_world_cover_tile(
     cache_dir: &Path,
     tile_id: &DemTileId,
 ) -> Result<PathBuf, String> {
@@ -118,7 +62,7 @@ fn ensure_world_cover_tile(
     )
 }
 
-fn list_all_available_files(
+pub fn list_all_available_files(
     geojson_file: &Path,
 ) -> Result<Vec<DemTileId>, String> {
     // Open the GeoJSON file directly.
@@ -191,8 +135,6 @@ fn decompress_tile_data(
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
 ) -> Result<Vec<Vec<Raster16>>, String> {
-    let start = Instant::now();
-
     let file = match File::open(&world_cover_tiff_file_name) {
         Ok(file) => file,
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
@@ -335,17 +277,6 @@ pub fn read_world_cover_tiff_file(
                     }
                 };
 
-            let duration = start.elapsed();
-
-            println!(
-                "{:2?}: Tile {}: Offset: {}, Byte Count: {}, Decompressed Size: {}",
-                duration,
-                tile_index,
-                tile_offset,
-                tile_byte_count,
-                decompressed_tile_data.len()
-            );
-
             if decompressed_tile_data.len() != tile_size_bytes as usize {
                 return Err(format!(
                     "Decompressed data size does not match expected size: {}",
@@ -414,10 +345,9 @@ mod tests {
     use crate::water_bodies::worldcover::{
         ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
         read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
-        WORLD_COVER_CACHE_DIR,
     };
 
-    use crate::water_bodies::water_bodies::WaterBodiesProcessingTile;
+    use crate::water_bodies::water_bodies::generate_water_bodies_processing_tiles_from_worldcover_ones;
     use dotenv::dotenv;
     use std::path::Path;
     use std::sync::Once;
@@ -428,29 +358,6 @@ mod tests {
         INIT.call_once(|| {
             dotenv().ok();
         });
-    }
-
-    #[test]
-    fn parsing_and_formatting_tile_ids() {
-        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
-        assert_eq!(tile_id.lon, 168);
-        assert_eq!(tile_id.lat, 54);
-        assert_eq!(tile_id.to_string(), "N54E168");
-
-        let tile_id = DemTileId::from_tile_name("S54W168").unwrap();
-        assert_eq!(tile_id.lon, -168);
-        assert_eq!(tile_id.lat, -54);
-        assert_eq!(tile_id.to_string(), "S54W168");
-
-        let tile_id = DemTileId::from_tile_name("N54W168").unwrap();
-        assert_eq!(tile_id.lon, -168);
-        assert_eq!(tile_id.lat, 54);
-        assert_eq!(tile_id.to_string(), "N54W168");
-
-        let tile_id = DemTileId::from_tile_name("S54E168").unwrap();
-        assert_eq!(tile_id.lon, 168);
-        assert_eq!(tile_id.lat, -54);
-        assert_eq!(tile_id.to_string(), "S54E168");
     }
 
     // todo 5: extract the water bodies tiles generation logic into a separate function
@@ -502,33 +409,10 @@ mod tests {
         assert_eq!(world_cover_tiles.len(), 3);
         assert_eq!(world_cover_tiles[0].len(), 3);
 
-        let processing_dir =
-            cache_dir.join(WORLD_COVER_CACHE_DIR).join("processing");
-
-        if !processing_dir.exists() {
-            std::fs::create_dir_all(&processing_dir).unwrap();
-        }
-
-        // downsample the tiles to the WATER_BODY_TILE_SIZE
-        for row in 0..world_cover_tiles.len() {
-            for col in 0..world_cover_tiles[row].len() {
-                let tile = &world_cover_tiles[row][col];
-
-                let tile_id = DemTileId::new(
-                    sample_tile_id.lon + col as i16,
-                    sample_tile_id.lat + row as i16,
-                );
-                let downsampled_tile =
-                    WaterBodiesProcessingTile::downsample_from_worldcover_tile(
-                        &tile_id, &tile,
-                    );
-
-                let tile_file_name = processing_dir
-                    .join(downsampled_tile.tile_id.to_string())
-                    .with_extension("wbp");
-
-                downsampled_tile.write_to_file(&tile_file_name).unwrap();
-            }
-        }
+        generate_water_bodies_processing_tiles_from_worldcover_ones(
+            sample_tile_id,
+            &world_cover_tiles,
+            cache_dir,
+        );
     }
 }

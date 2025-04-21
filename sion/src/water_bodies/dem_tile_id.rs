@@ -46,3 +46,31 @@ impl fmt::Display for DemTileId {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::water_bodies::dem_tile_id::DemTileId;
+
+    #[test]
+    fn parsing_and_formatting_tile_ids() {
+        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+        assert_eq!(tile_id.lon, 168);
+        assert_eq!(tile_id.lat, 54);
+        assert_eq!(tile_id.to_string(), "N54E168");
+
+        let tile_id = DemTileId::from_tile_name("S54W168").unwrap();
+        assert_eq!(tile_id.lon, -168);
+        assert_eq!(tile_id.lat, -54);
+        assert_eq!(tile_id.to_string(), "S54W168");
+
+        let tile_id = DemTileId::from_tile_name("N54W168").unwrap();
+        assert_eq!(tile_id.lon, -168);
+        assert_eq!(tile_id.lat, 54);
+        assert_eq!(tile_id.to_string(), "N54W168");
+
+        let tile_id = DemTileId::from_tile_name("S54E168").unwrap();
+        assert_eq!(tile_id.lon, 168);
+        assert_eq!(tile_id.lat, -54);
+        assert_eq!(tile_id.to_string(), "S54E168");
+    }
+}

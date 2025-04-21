@@ -5,7 +5,10 @@ use std::io::Write;
 use std::io::{self};
 use std::path::Path;
 
-pub const WATER_BODY_TILE_SIZE: u16 = 1800;
+pub const WATER_BODIES_TILE_SIZE: u16 = 1800;
+
+pub const WATER_BODIES_CACHE_DIR: &str = "WaterBodies";
+pub const WATER_BODIES_PROCESSING_DIR: &str = "processing";
 
 pub enum WaterBodyValue {
     NoData = 0,
@@ -23,8 +26,8 @@ impl WaterBodiesProcessingTile {
         WaterBodiesProcessingTile {
             tile_id: tile_id.clone(),
             data: vec![
-                vec![0; WATER_BODY_TILE_SIZE as usize];
-                WATER_BODY_TILE_SIZE as usize
+                vec![0; WATER_BODIES_TILE_SIZE as usize];
+                WATER_BODIES_TILE_SIZE as usize
             ],
         }
     }
@@ -35,11 +38,11 @@ impl WaterBodiesProcessingTile {
     ) -> Self {
         let mut downsampled = WaterBodiesProcessingTile::new(tile_id);
 
-        let x_ratio = raster.width as f32 / WATER_BODY_TILE_SIZE as f32;
-        let y_ratio = raster.height as f32 / WATER_BODY_TILE_SIZE as f32;
+        let x_ratio = raster.width as f32 / WATER_BODIES_TILE_SIZE as f32;
+        let y_ratio = raster.height as f32 / WATER_BODIES_TILE_SIZE as f32;
 
-        for y in 0..WATER_BODY_TILE_SIZE {
-            for x in 0..WATER_BODY_TILE_SIZE {
+        for y in 0..WATER_BODIES_TILE_SIZE {
+            for x in 0..WATER_BODIES_TILE_SIZE {
                 let src_x_start = x as f32 * x_ratio;
                 let src_x_end = (x + 1) as f32 * x_ratio;
                 let src_y_start = y as f32 * y_ratio;
@@ -89,7 +92,7 @@ impl WaterBodiesProcessingTile {
     }
 
     pub fn set_pixel(&mut self, x: u16, y: u16, value: u16) {
-        if x >= WATER_BODY_TILE_SIZE || y >= WATER_BODY_TILE_SIZE {
+        if x >= WATER_BODIES_TILE_SIZE || y >= WATER_BODIES_TILE_SIZE {
             panic!("Pixel coordinates out of bounds");
         }
 
@@ -104,5 +107,41 @@ impl WaterBodiesProcessingTile {
             }
         }
         Ok(())
+    }
+}
+
+pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
+    world_cover_base_tile_id: &DemTileId,
+    world_cover_tiles: &Vec<Vec<Raster16>>,
+    cache_dir: &Path,
+) {
+    let processing_dir = cache_dir
+        .join(WATER_BODIES_CACHE_DIR)
+        .join(WATER_BODIES_PROCESSING_DIR);
+
+    if !processing_dir.exists() {
+        std::fs::create_dir_all(&processing_dir).unwrap();
+    }
+
+    // downsample the tiles to the WATER_BODY_TILE_SIZE
+    for row in 0..world_cover_tiles.len() {
+        for col in 0..world_cover_tiles[row].len() {
+            let tile = &world_cover_tiles[row][col];
+
+            let tile_id = DemTileId::new(
+                world_cover_base_tile_id.lon + col as i16,
+                world_cover_base_tile_id.lat + row as i16,
+            );
+            let downsampled_tile =
+                WaterBodiesProcessingTile::downsample_from_worldcover_tile(
+                    &tile_id, &tile,
+                );
+
+            let tile_file_name = processing_dir
+                .join(downsampled_tile.tile_id.to_string())
+                .with_extension("wbp");
+
+            downsampled_tile.write_to_file(&tile_file_name).unwrap();
+        }
     }
 }
