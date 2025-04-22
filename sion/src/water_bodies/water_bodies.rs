@@ -19,7 +19,7 @@ pub enum WaterBodyValue {
 pub struct WaterBodiesProcessingTile {
     pub tile_id: DemTileId,
     pub tile_size: u16,
-    data: Vec<Vec<u16>>,
+    data: Vec<u16>,
 }
 
 impl WaterBodiesProcessingTile {
@@ -28,8 +28,9 @@ impl WaterBodiesProcessingTile {
             tile_id: tile_id.clone(),
             tile_size,
             data: vec![
-                vec![0; WATER_BODIES_TILE_SIZE as usize];
+                0;
                 WATER_BODIES_TILE_SIZE as usize
+                    * WATER_BODIES_TILE_SIZE as usize
             ],
         }
     }
@@ -95,26 +96,27 @@ impl WaterBodiesProcessingTile {
     }
 
     pub fn get_pixel(&self, x: u16, y: u16) -> u16 {
-        if x >= WATER_BODIES_TILE_SIZE || y >= WATER_BODIES_TILE_SIZE {
+        if x >= self.tile_size || y >= self.tile_size {
             panic!("Pixel coordinates out of bounds");
         }
 
-        self.data[y as usize][x as usize]
+        self.data[y as usize * self.tile_size as usize + x as usize]
     }
 
     pub fn set_pixel(&mut self, x: u16, y: u16, value: u16) {
-        if x >= WATER_BODIES_TILE_SIZE || y >= WATER_BODIES_TILE_SIZE {
+        if x >= self.tile_size || y >= self.tile_size {
             panic!("Pixel coordinates out of bounds");
         }
 
-        self.data[y as usize][x as usize] = value;
+        self.data[y as usize * self.tile_size as usize + x as usize] = value;
     }
 
     pub fn write_to_file(&self, file_name: &Path) -> Result<(), io::Error> {
         let mut file = File::create(file_name)?;
-        for row in &self.data {
-            for &value in row {
-                file.write_all(&value.to_le_bytes())?;
+        for y in 0..self.tile_size {
+            for x in 0..self.tile_size {
+                let pixel_value = self.get_pixel(x, y);
+                file.write_all(&pixel_value.to_le_bytes())?;
             }
         }
         Ok(())
