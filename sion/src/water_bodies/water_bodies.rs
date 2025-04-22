@@ -166,45 +166,81 @@ pub mod tests {
     use crate::water_bodies::dem_tile_id::DemTileId;
     use crate::water_bodies::water_bodies::WaterBodiesProcessingTile;
 
-    fn parse_scene(scene: &str) -> WaterBodiesProcessingTile {
-        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+    #[derive(Debug)]
+    struct Scene {
+        scene: String,
+    }
 
-        let lines = scene
-            .lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<&str>>();
-
-        let tile_size = lines.len() as u16;
-
-        let mut tile = WaterBodiesProcessingTile::new(&tile_id, tile_size);
-
-        for (y, line) in lines.iter().enumerate() {
-            if line.len() != tile_size as usize {
-                panic!("Line length does not match tile size");
-            }
-
-            for (x, c) in line.chars().enumerate() {
-                tile.set_pixel(x as u16, y as u16, (c as u16) - '0' as u16);
+    impl Scene {
+        fn new(scene: &str) -> Self {
+            Scene {
+                scene: scene.to_string(),
             }
         }
 
-        tile
+        fn to_tile(&self) -> WaterBodiesProcessingTile {
+            let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+
+            let lines = self
+                .scene
+                .lines()
+                .map(|line| line.trim())
+                .filter(|line| !line.is_empty())
+                .collect::<Vec<&str>>();
+
+            let tile_size = lines.len() as u16;
+
+            let mut tile = WaterBodiesProcessingTile::new(&tile_id, tile_size);
+
+            for (y, line) in lines.iter().enumerate() {
+                if line.len() != tile_size as usize {
+                    panic!("Line length does not match tile size");
+                }
+
+                for (x, c) in line.chars().enumerate() {
+                    tile.set_pixel(x as u16, y as u16, (c as u16) - '0' as u16);
+                }
+            }
+
+            tile
+        }
+
+        fn from_tile(tile: &WaterBodiesProcessingTile) -> Scene {
+            let mut scene = String::new();
+            for y in 0..tile.tile_size {
+                for x in 0..tile.tile_size {
+                    let pixel_value = tile.get_pixel(x, y);
+                    scene.push_str(&pixel_value.to_string());
+                }
+                scene.push('\n');
+            }
+            Scene::new(&scene)
+        }
+    }
+
+    impl PartialEq for Scene {
+        fn eq(&self, other: &Self) -> bool {
+            self.scene.replace("\n", "") == other.scene.replace("\n", "")
+        }
     }
 
     #[test]
     fn icebreaker() {
-        let scene = r#"
+        let scene = Scene::new(
+            r#"
 0000100
 0010100
 1011110
 1111100
 0011100
 0011000
-0001000"#;
+0001000"#,
+        );
 
-        let tile = parse_scene(scene);
+        let tile = scene.to_tile();
         assert_eq!(tile.get_pixel(0, 0), 0);
         assert_eq!(tile.get_pixel(4, 0), 1);
+
+        assert_eq!(Scene::from_tile(&tile), scene);
     }
 }
