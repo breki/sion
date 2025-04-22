@@ -91,6 +91,14 @@ impl WaterBodiesProcessingTile {
         downsampled
     }
 
+    pub fn get_pixel(&self, x: u16, y: u16) -> u16 {
+        if x >= WATER_BODIES_TILE_SIZE || y >= WATER_BODIES_TILE_SIZE {
+            panic!("Pixel coordinates out of bounds");
+        }
+
+        self.data[y as usize][x as usize]
+    }
+
     pub fn set_pixel(&mut self, x: u16, y: u16, value: u16) {
         if x >= WATER_BODIES_TILE_SIZE || y >= WATER_BODIES_TILE_SIZE {
             panic!("Pixel coordinates out of bounds");
@@ -143,5 +151,48 @@ pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
 
             downsampled_tile.write_to_file(&tile_file_name).unwrap();
         }
+    }
+}
+
+// todo 0: implement water bodies coloring algorithm
+
+#[cfg(test)]
+pub mod tests {
+    use crate::water_bodies::dem_tile_id::DemTileId;
+    use crate::water_bodies::water_bodies::WaterBodiesProcessingTile;
+
+    fn parse_scene(scene: &str) -> WaterBodiesProcessingTile {
+        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+        let mut tile = WaterBodiesProcessingTile::new(&tile_id);
+
+        let lines = scene.lines();
+
+        for (y, line) in lines
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .enumerate()
+        {
+            for (x, c) in line.chars().enumerate() {
+                tile.set_pixel(x as u16, y as u16, (c as u16) - '0' as u16);
+            }
+        }
+
+        tile
+    }
+
+    #[test]
+    fn icebreaker() {
+        let scene = r#"
+0000100
+0010100
+1011110
+1111100
+0011100
+0011000
+0001000"#;
+
+        let tile = parse_scene(scene);
+        assert_eq!(tile.get_pixel(0, 0), 0);
+        assert_eq!(tile.get_pixel(4, 0), 1);
     }
 }

@@ -11,8 +11,6 @@ use std::path::{Path, PathBuf};
 use tiff::decoder::Decoder;
 use tiff::tags::{PlanarConfiguration, Tag};
 
-// todo 0: move stuff into their own modules
-
 const WORLD_COVER_S3_DOMAIN: &str =
     "https://esa-worldcover.s3.eu-central-1.amazonaws.com";
 
@@ -360,7 +358,6 @@ mod tests {
         });
     }
 
-    // todo 5: extract the water bodies tiles generation logic into a separate function
     #[test]
     fn load_world_cover_tiff_file() {
         initialize_logging();
