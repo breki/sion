@@ -18,13 +18,15 @@ pub enum WaterBodyValue {
 
 pub struct WaterBodiesProcessingTile {
     pub tile_id: DemTileId,
+    pub tile_size: u16,
     data: Vec<Vec<u16>>,
 }
 
 impl WaterBodiesProcessingTile {
-    pub fn new(tile_id: &DemTileId) -> Self {
+    pub fn new(tile_id: &DemTileId, tile_size: u16) -> Self {
         WaterBodiesProcessingTile {
             tile_id: tile_id.clone(),
+            tile_size,
             data: vec![
                 vec![0; WATER_BODIES_TILE_SIZE as usize];
                 WATER_BODIES_TILE_SIZE as usize
@@ -36,7 +38,8 @@ impl WaterBodiesProcessingTile {
         tile_id: &DemTileId,
         raster: &Raster16,
     ) -> Self {
-        let mut downsampled = WaterBodiesProcessingTile::new(tile_id);
+        let mut downsampled =
+            WaterBodiesProcessingTile::new(tile_id, WATER_BODIES_TILE_SIZE);
 
         let x_ratio = raster.width as f32 / WATER_BODIES_TILE_SIZE as f32;
         let y_ratio = raster.height as f32 / WATER_BODIES_TILE_SIZE as f32;
@@ -154,7 +157,7 @@ pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
     }
 }
 
-// todo 0: implement water bodies coloring algorithm
+// todo 3: implement water bodies coloring algorithm
 
 #[cfg(test)]
 pub mod tests {
@@ -163,15 +166,22 @@ pub mod tests {
 
     fn parse_scene(scene: &str) -> WaterBodiesProcessingTile {
         let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
-        let mut tile = WaterBodiesProcessingTile::new(&tile_id);
 
-        let lines = scene.lines();
-
-        for (y, line) in lines
+        let lines = scene
+            .lines()
             .map(|line| line.trim())
             .filter(|line| !line.is_empty())
-            .enumerate()
-        {
+            .collect::<Vec<&str>>();
+
+        let tile_size = lines.len() as u16;
+
+        let mut tile = WaterBodiesProcessingTile::new(&tile_id, tile_size);
+
+        for (y, line) in lines.iter().enumerate() {
+            if line.len() != tile_size as usize {
+                panic!("Line length does not match tile size");
+            }
+
             for (x, c) in line.chars().enumerate() {
                 tile.set_pixel(x as u16, y as u16, (c as u16) - '0' as u16);
             }
