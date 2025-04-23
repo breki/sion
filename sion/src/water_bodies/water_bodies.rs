@@ -125,6 +125,7 @@ impl WaterBodiesProcessingTile {
     }
 }
 
+// todo 5: parallelize the processing of the tiles
 pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
     world_cover_base_tile_id: &DemTileId,
     world_cover_tiles: &Vec<Vec<Raster16>>,
@@ -305,6 +306,13 @@ pub fn color_water_bodies(
 
     water_bodies
 }
+
+// todo 10: elimination of small water bodies based on a criteria
+
+// todo 15: a function that performs the water body analysis and selection for
+//   a given tile ID. It has to be able to obtain all the necessary tiles,
+//   construct a bigger tile, perform the analysis on it, and then write the
+//   results to the disk.
 
 #[cfg(test)]
 pub mod tests {
