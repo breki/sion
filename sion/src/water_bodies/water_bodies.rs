@@ -1,5 +1,6 @@
 use crate::raster16::Raster16;
 use crate::water_bodies::dem_tile_id::DemTileId;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Write;
 use std::io::{self};
@@ -159,9 +160,6 @@ pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
     }
 }
 
-// todo 3: implement water bodies coloring algorithm
-use std::collections::VecDeque;
-
 #[derive(Debug, Clone, Default, PartialEq)]
 struct Rect {
     min_x: u16,
@@ -191,6 +189,8 @@ impl Rect {
         }
     }
 }
+
+// todo 5: water body colors should start from 2
 
 #[derive(Debug)]
 pub struct WaterBody {
@@ -367,7 +367,7 @@ pub mod tests {
     }
 
     #[test]
-    fn icebreaker() {
+    fn color_scene_1() {
         let scene = Scene::new(
             r#"
 0000100
@@ -380,10 +380,6 @@ pub mod tests {
         );
 
         let mut tile = scene.to_tile();
-        assert_eq!(tile.get_cell(0, 0), 0);
-        assert_eq!(tile.get_cell(4, 0), 1);
-
-        assert_eq!(Scene::from_tile(&tile), scene);
 
         let water_bodies = super::color_water_bodies(&mut tile);
 
@@ -412,5 +408,71 @@ pub mod tests {
                 height: 7,
             }
         );
+    }
+
+    #[test]
+    fn color_scene_2() {
+        let scene = Scene::new(
+            r#"
+0000100
+0010100
+1011110
+1111100
+0011100
+0011010
+0001001"#,
+        );
+
+        let mut tile = scene.to_tile();
+
+        let water_bodies = super::color_water_bodies(&mut tile);
+
+        let expected_scene = Scene::new(
+            r#"
+0000200
+0020200
+2022220
+2222200
+0022200
+0022030
+0002004"#,
+        );
+
+        assert_eq!(Scene::from_tile(&tile), expected_scene);
+
+        assert_eq!(water_bodies.len(), 3);
+        assert_eq!(water_bodies[1].color, 3);
+        assert_eq!(water_bodies[1].surface_area, 1);
+        assert_eq!(water_bodies[2].color, 4);
+        assert_eq!(water_bodies[2].surface_area, 1)
+    }
+
+    #[test]
+    fn color_scene_3() {
+        let scene = Scene::new(
+            r#"
+0000
+0001
+0011
+0000"#,
+        );
+
+        let mut tile = scene.to_tile();
+
+        let water_bodies = super::color_water_bodies(&mut tile);
+
+        let expected_scene = Scene::new(
+            r#"
+0000
+0002
+0022
+0000"#,
+        );
+
+        assert_eq!(Scene::from_tile(&tile), expected_scene);
+
+        assert_eq!(water_bodies.len(), 1);
+        assert_eq!(water_bodies[0].color, 2);
+        assert_eq!(water_bodies[0].surface_area, 3);
     }
 }
