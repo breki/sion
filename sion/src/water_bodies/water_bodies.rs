@@ -11,6 +11,7 @@ pub const WATER_BODIES_TILE_SIZE: u16 = 1800;
 pub const WATER_BODIES_CACHE_DIR: &str = "WaterBodies";
 pub const WATER_BODIES_PROCESSING_DIR: &str = "processing";
 
+#[repr(u16)]
 pub enum WaterBodyValue {
     NoData = 0,
     NonWater = 1,
@@ -190,8 +191,6 @@ impl Rect {
     }
 }
 
-// todo 5: water body colors should start from 2
-
 #[derive(Debug)]
 pub struct WaterBody {
     color: u16,
@@ -208,7 +207,7 @@ fn try_color_next_water_body(
     let mut water_body = None;
 
     while let Some((x, y)) = current_point {
-        let pixel_color = tile.get_cell(x, y);
+        let cell_color = tile.get_cell(x, y);
 
         let next_point = if x < tile.tile_size - 1 {
             Some((x + 1, y))
@@ -218,7 +217,7 @@ fn try_color_next_water_body(
             None
         };
 
-        if pixel_color == 1 {
+        if cell_color == WaterBodyValue::Water as u16 {
             let mut points_to_color = VecDeque::new();
             points_to_color.push_back((x, y));
             let mut surface_area = 0;
@@ -227,32 +226,36 @@ fn try_color_next_water_body(
             while let Some((px, py)) = points_to_color.pop_front() {
                 let point_index: usize =
                     py as usize * tile.tile_size as usize + px as usize;
-                if tile.cells[point_index] == 1 {
+                if tile.cells[point_index] == WaterBodyValue::Water as u16 {
                     tile.cells[point_index] = color;
                     surface_area += 1;
-                    coverage.extend((px, py as u16));
+                    coverage.extend((px, py));
 
                     // Neighbor left
-                    if px > 0 && tile.cells[point_index - 1] == 1 {
+                    if px > 0
+                        && tile.cells[point_index - 1]
+                            == WaterBodyValue::Water as u16
+                    {
                         points_to_color.push_back((px - 1, py));
                     }
                     // Neighbor right
-                    if px < tile.tile_size - 1
-                        && tile.cells[point_index + 1] == 1
+                    if px < tile.tile_size - WaterBodyValue::Water as u16
+                        && tile.cells[point_index + 1]
+                            == WaterBodyValue::Water as u16
                     {
                         points_to_color.push_back((px + 1, py));
                     }
                     // Neighbor up
                     if py > 0
                         && tile.cells[point_index - tile.tile_size as usize]
-                            == 1
+                            == WaterBodyValue::Water as u16
                     {
                         points_to_color.push_back((px, py - 1));
                     }
                     // Neighbor down
                     if py < tile.tile_size - 1
                         && tile.cells[point_index + tile.tile_size as usize]
-                            == 1
+                            == WaterBodyValue::Water as u16
                     {
                         points_to_color.push_back((px, py + 1));
                     }
@@ -279,7 +282,7 @@ fn try_color_next_water_body(
 pub fn color_water_bodies(
     tile: &mut WaterBodiesProcessingTile,
 ) -> Vec<WaterBody> {
-    let mut color = 2;
+    let mut color = WaterBodyValue::Water as u16 + 1;
     let mut water_bodies = Vec::new();
     let mut starting_point = (0, 0);
 
@@ -370,21 +373,6 @@ pub mod tests {
     fn color_scene_1() {
         let scene = Scene::new(
             r#"
-0000100
-0010100
-1011110
-1111100
-0011100
-0011000
-0001000"#,
-        );
-
-        let mut tile = scene.to_tile();
-
-        let water_bodies = super::color_water_bodies(&mut tile);
-
-        let expected_scene = Scene::new(
-            r#"
 0000200
 0020200
 2022220
@@ -394,10 +382,25 @@ pub mod tests {
 0002000"#,
         );
 
+        let mut tile = scene.to_tile();
+
+        let water_bodies = super::color_water_bodies(&mut tile);
+
+        let expected_scene = Scene::new(
+            r#"
+0000300
+0030300
+3033330
+3333300
+0033300
+0033000
+0003000"#,
+        );
+
         assert_eq!(Scene::from_tile(&tile), expected_scene);
 
         assert_eq!(water_bodies.len(), 1);
-        assert_eq!(water_bodies[0].color, 2);
+        assert_eq!(water_bodies[0].color, 3);
         assert_eq!(water_bodies[0].surface_area, 19);
         assert_eq!(
             water_bodies[0].coverage,
@@ -414,13 +417,13 @@ pub mod tests {
     fn color_scene_2() {
         let scene = Scene::new(
             r#"
-0000100
-0010100
-1011110
-1111100
-0011100
-0011010
-0001001"#,
+0000200
+0020200
+2022220
+2222200
+0022200
+0022020
+0002002"#,
         );
 
         let mut tile = scene.to_tile();
@@ -429,21 +432,21 @@ pub mod tests {
 
         let expected_scene = Scene::new(
             r#"
-0000200
-0020200
-2022220
-2222200
-0022200
-0022030
-0002004"#,
+0000300
+0030300
+3033330
+3333300
+0033300
+0033040
+0003005"#,
         );
 
         assert_eq!(Scene::from_tile(&tile), expected_scene);
 
         assert_eq!(water_bodies.len(), 3);
-        assert_eq!(water_bodies[1].color, 3);
+        assert_eq!(water_bodies[1].color, 4);
         assert_eq!(water_bodies[1].surface_area, 1);
-        assert_eq!(water_bodies[2].color, 4);
+        assert_eq!(water_bodies[2].color, 5);
         assert_eq!(water_bodies[2].surface_area, 1)
     }
 
@@ -452,8 +455,8 @@ pub mod tests {
         let scene = Scene::new(
             r#"
 0000
-0001
-0011
+0002
+0022
 0000"#,
         );
 
@@ -464,15 +467,15 @@ pub mod tests {
         let expected_scene = Scene::new(
             r#"
 0000
-0002
-0022
+0003
+0033
 0000"#,
         );
 
         assert_eq!(Scene::from_tile(&tile), expected_scene);
 
         assert_eq!(water_bodies.len(), 1);
-        assert_eq!(water_bodies[0].color, 2);
+        assert_eq!(water_bodies[0].color, 3);
         assert_eq!(water_bodies[0].surface_area, 3);
     }
 }
