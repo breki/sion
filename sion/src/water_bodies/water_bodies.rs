@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Write;
 use std::io::{self};
 use std::path::Path;
+use crate::water_bodies::worldcover::WORLD_COVER_TILES_IN_BATCH;
 
 pub const WATER_BODIES_TILE_SIZE: u16 = 1800;
 
@@ -128,7 +129,7 @@ impl WaterBodiesProcessingTile {
 // todo 5: parallelize the processing of the tiles
 pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
     world_cover_base_tile_id: &DemTileId,
-    world_cover_tiles: &Vec<Vec<Raster16>>,
+    world_cover_tiles: &Vec<Raster16>,
     cache_dir: &Path,
 ) {
     let processing_dir = cache_dir
@@ -140,25 +141,24 @@ pub fn generate_water_bodies_processing_tiles_from_worldcover_ones(
     }
 
     // downsample the tiles to the WATER_BODY_TILE_SIZE
-    for row in 0..world_cover_tiles.len() {
-        for col in 0..world_cover_tiles[row].len() {
-            let tile = &world_cover_tiles[row][col];
-
-            let tile_id = DemTileId::new(
-                world_cover_base_tile_id.lon + col as i16,
-                world_cover_base_tile_id.lat + row as i16,
+    for (i, tile) in world_cover_tiles.iter().enumerate() {
+        let col = i as u16 % WORLD_COVER_TILES_IN_BATCH;
+        let row = i as u16 / WORLD_COVER_TILES_IN_BATCH;
+        
+        let tile_id = DemTileId::new(
+            world_cover_base_tile_id.lon + col as i16,
+            world_cover_base_tile_id.lat + row as i16,
+        );
+        let downsampled_tile =
+            WaterBodiesProcessingTile::downsample_from_worldcover_tile(
+                &tile_id, &tile,
             );
-            let downsampled_tile =
-                WaterBodiesProcessingTile::downsample_from_worldcover_tile(
-                    &tile_id, &tile,
-                );
 
-            let tile_file_name = processing_dir
-                .join(downsampled_tile.tile_id.to_string())
-                .with_extension("wbp");
+        let tile_file_name = processing_dir
+            .join(downsampled_tile.tile_id.to_string())
+            .with_extension("wbp");
 
-            downsampled_tile.write_to_file(&tile_file_name).unwrap();
-        }
+        downsampled_tile.write_to_file(&tile_file_name).unwrap();
     }
 }
 

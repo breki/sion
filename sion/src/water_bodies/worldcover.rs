@@ -20,7 +20,7 @@ const WORLD_COVER_YEAR: &str = "2021";
 const WORLD_COVER_CACHE_DIR: &str = "WorldCover";
 
 const WORLD_COVER_TILE_SIZE: u16 = 12000;
-const WORLD_COVER_TILES_IN_BATCH: u16 = 3;
+pub const WORLD_COVER_TILES_IN_BATCH: u16 = 3;
 const WORLD_COVER_BITMAP_SIZE: u16 =
     WORLD_COVER_TILE_SIZE * WORLD_COVER_TILES_IN_BATCH;
 
@@ -132,7 +132,7 @@ fn decompress_tile_data(
 
 pub fn read_world_cover_tiff_file(
     world_cover_tiff_file_name: &Path,
-) -> Result<Vec<Vec<Raster16>>, String> {
+) -> Result<Vec<Raster16>, String> {
     let file = match File::open(&world_cover_tiff_file_name) {
         Ok(file) => file,
         Err(e) => return Err(format!("Failed to open TIFF file: {}", e)),
@@ -212,17 +212,15 @@ pub fn read_world_cover_tiff_file(
     };
 
     // create a 3x3 2D Vec of bitmaps
-    let mut water_bodies_tiles: Vec<Vec<Raster16>> = Vec::new();
+    let mut water_bodies_tiles: Vec<Raster16> = Vec::new();
 
     for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-        let mut row: Vec<Raster16> = Vec::new();
         for _ in 0..WORLD_COVER_TILES_IN_BATCH {
-            row.push(Raster16::new(
+            water_bodies_tiles.push(Raster16::new(
                 WORLD_COVER_TILE_SIZE,
                 WORLD_COVER_TILE_SIZE,
             ));
         }
-        water_bodies_tiles.push(row);
     }
 
     let mut reader = BufReader::new(file_for_image_data);
@@ -297,9 +295,10 @@ pub fn read_world_cover_tiff_file(
                         let tile_col = abs_x / WORLD_COVER_TILE_SIZE;
 
                         if tile_col < WORLD_COVER_TILES_IN_BATCH {
-                            let tile = &mut water_bodies_tiles
-                                [tile_row as usize]
-                                [tile_col as usize];
+                            let tile = &mut water_bodies_tiles[tile_row
+                                as usize
+                                * WORLD_COVER_TILES_IN_BATCH as usize
+                                + tile_col as usize];
 
                             // calculate the tile-local coordinates
                             let local_x = abs_x % WORLD_COVER_TILE_SIZE;
@@ -343,6 +342,7 @@ mod tests {
     use crate::water_bodies::worldcover::{
         ensure_geojson_file, ensure_world_cover_tile, list_all_available_files,
         read_world_cover_tiff_file, world_cover_tile_download_url, DemTileId,
+        WORLD_COVER_TILES_IN_BATCH,
     };
 
     use crate::water_bodies::water_bodies::generate_water_bodies_processing_tiles_from_worldcover_ones;
@@ -403,8 +403,10 @@ mod tests {
 
         let world_cover_tiles = tiff_file_reading_result.unwrap();
 
-        assert_eq!(world_cover_tiles.len(), 3);
-        assert_eq!(world_cover_tiles[0].len(), 3);
+        assert_eq!(
+            world_cover_tiles.len(),
+            (WORLD_COVER_TILES_IN_BATCH * WORLD_COVER_TILES_IN_BATCH) as usize
+        );
 
         generate_water_bodies_processing_tiles_from_worldcover_ones(
             sample_tile_id,
