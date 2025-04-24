@@ -1909,6 +1909,7 @@ dependencies = [
  "dotenv",
  "flate2",
  "image",
+ "rayon",
  "reqwest",
  "rstest",
  "serde_json",
