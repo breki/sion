@@ -1,6 +1,8 @@
 #![deny(warnings)]
 
 use clap::{Parser, Subcommand};
+use sion::water_bodies::command::generate_water_bodies_tile;
+use sion::water_bodies::dem_tile_id::DemTileId;
 
 #[derive(Parser)]
 #[command(name = "water-bodies")]
@@ -11,7 +13,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    GenerateTile { tile_id: String },
+    GenerateTile { tile_id: DemTileId },
 }
 
 fn main() {
@@ -19,7 +21,13 @@ fn main() {
 
     match &cli.command {
         Commands::GenerateTile { tile_id } => {
-            println!("Tile data generated for tile ID: {}", tile_id);
+            // todo 0: prepare function skeleton for generating water bodies tile
+            match generate_water_bodies_tile(tile_id) {
+                Ok(_) => println!("Water bodies tile generated successfully."),
+                Err(e) => {
+                    eprintln!("Error generating water bodies tile: {}", e)
+                }
+            }
         }
     }
 }

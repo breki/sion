@@ -336,7 +336,7 @@ pub mod tests {
         }
 
         fn to_tile(&self) -> WaterBodiesProcessingTile {
-            let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+            let tile_id: DemTileId = "N54E168".parse().unwrap();
 
             let lines = self
                 .scene

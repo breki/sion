@@ -101,7 +101,7 @@ pub fn list_all_available_files(
                 .and_then(|ll_tile| ll_tile.as_str())
                 .map(|tile_name| tile_name.to_string())
                 .map(|tile_name| {
-                    DemTileId::from_tile_name(&tile_name).unwrap_or_else(|_| {
+                    tile_name.parse().unwrap_or_else(|_| {
                         panic!("Failed to parse tile name: {}", tile_name)
                     })
                 })

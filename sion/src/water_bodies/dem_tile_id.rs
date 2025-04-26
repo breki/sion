@@ -1,5 +1,5 @@
 use std::fmt;
-
+use std::str::FromStr;
 // todo X: in the long run, we should merge this into the dem_tile module
 
 #[derive(Copy, Clone, Debug)]
@@ -12,9 +12,12 @@ impl DemTileId {
     pub fn new(lon: i16, lat: i16) -> Self {
         DemTileId { lon, lat }
     }
+}
 
-    // parses file names like "S54E168", taking into account N-S and E-W
-    pub fn from_tile_name(tile_name: &str) -> Result<DemTileId, String> {
+impl FromStr for DemTileId {
+    type Err = String;
+
+    fn from_str(tile_name: &str) -> Result<Self, Self::Err> {
         if tile_name.len() != 7 {
             return Err(format!("Invalid tile ID length: {}", tile_name));
         }
@@ -26,6 +29,7 @@ impl DemTileId {
             .parse::<i16>()
             .map_err(|e| format!("Failed to parse longitude: {}", e))?;
 
+        // todo 2: this should be case insensitive
         // Adjust the sign of the coordinates based on the hemisphere
         let lon = if &tile_name[3..4] == "E" { lon } else { -lon };
         let lat = if &tile_name[0..1] == "N" { lat } else { -lat };
@@ -53,22 +57,22 @@ mod tests {
 
     #[test]
     fn parsing_and_formatting_tile_ids() {
-        let tile_id = DemTileId::from_tile_name("N54E168").unwrap();
+        let tile_id: DemTileId = "N54E168".parse().unwrap();
         assert_eq!(tile_id.lon, 168);
         assert_eq!(tile_id.lat, 54);
         assert_eq!(tile_id.to_string(), "N54E168");
 
-        let tile_id = DemTileId::from_tile_name("S54W168").unwrap();
+        let tile_id: DemTileId = "S54W168".parse().unwrap();
         assert_eq!(tile_id.lon, -168);
         assert_eq!(tile_id.lat, -54);
         assert_eq!(tile_id.to_string(), "S54W168");
 
-        let tile_id = DemTileId::from_tile_name("N54W168").unwrap();
+        let tile_id: DemTileId = "N54W168".parse().unwrap();
         assert_eq!(tile_id.lon, -168);
         assert_eq!(tile_id.lat, 54);
         assert_eq!(tile_id.to_string(), "N54W168");
 
-        let tile_id = DemTileId::from_tile_name("S54E168").unwrap();
+        let tile_id: DemTileId = "S54E168".parse().unwrap();
         assert_eq!(tile_id.lon, 168);
         assert_eq!(tile_id.lat, -54);
         assert_eq!(tile_id.to_string(), "S54E168");
