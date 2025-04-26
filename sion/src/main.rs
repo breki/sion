@@ -11,10 +11,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    GenerateTile {
-        #[arg(String)]
-        tile_id: String,
-    },
+    GenerateTile { tile_id: String },
 }
 
 fn main() {

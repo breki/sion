@@ -1,8 +1,10 @@
+#[allow(dead_code)]
 pub struct XasTile {
     pub size: usize,
     data: Box<[u8]>,
 }
 
+#[allow(dead_code)]
 impl XasTile {
     pub fn new(size: usize) -> XasTile {
         XasTile {

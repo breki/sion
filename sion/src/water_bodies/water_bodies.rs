@@ -196,6 +196,7 @@ impl Rect {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct WaterBody {
     color: u16,
     surface_area: usize,

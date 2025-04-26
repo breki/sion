@@ -10,6 +10,7 @@ use std::io::Write;
 //    simply generate ones for a given lookup table resolution - use the other
 //    way around - from the degree value to the original value?
 
+#[allow(dead_code)]
 pub fn calculate_pq(dem_tile: &DemTile, x: usize, y: usize) -> (i32, i32) {
     let center_index = y * dem_tile.size + x;
     let top_center_index = center_index - dem_tile.size;
@@ -36,6 +37,7 @@ pub fn calculate_pq(dem_tile: &DemTile, x: usize, y: usize) -> (i32, i32) {
     (p, q)
 }
 
+#[allow(dead_code)]
 pub fn calculate_slope_and_aspect(p: i32, q: i32) -> (f32, f32) {
     let pf = p as f32;
     let qf = q as f32;
@@ -47,6 +49,7 @@ pub fn calculate_slope_and_aspect(p: i32, q: i32) -> (f32, f32) {
     (slope, aspect)
 }
 
+#[allow(dead_code)]
 pub fn construct_lookup_tables(
     dem: &DemTile,
     resolution: i32,
@@ -76,6 +79,7 @@ pub fn construct_lookup_tables(
     (slope_lookup_table, aspect_lookup_table)
 }
 
+#[allow(dead_code)]
 fn save_lookup_table(
     lookup_table_name: &str,
     lookup_table: HashMap<i32, i8>,
@@ -126,6 +130,7 @@ fn save_lookup_table(
 /// This information will be used to truncate the lookup table generated in the
 /// C++ code to reduce its size. Instead of the repeated values, we will use
 /// C++ macros to define the first index of each repeated value.
+#[allow(dead_code)]
 fn find_first_and_last_occurrences_for_each_lookup_value(
     lookup_table: &HashMap<i32, i8>,
 ) -> (Vec<i32>, HashMap<i8, i32>, HashMap<i8, i32>) {
@@ -152,6 +157,7 @@ fn find_first_and_last_occurrences_for_each_lookup_value(
     (sorted_keys, first_index, last_index)
 }
 
+#[allow(dead_code)]
 fn render_truncated_values_constants(
     lookup_table_name: &str,
     first_index: HashMap<i8, i32>,
@@ -185,6 +191,7 @@ fn render_truncated_values_constants(
     }
 }
 
+#[allow(dead_code)]
 fn render_lookup_table_array(
     lookup_table: HashMap<i32, i8>,
     first_index: &HashMap<i8, i32>,

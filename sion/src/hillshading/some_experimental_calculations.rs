@@ -1,9 +1,11 @@
 use crate::trig::rad_to_deg;
 
+#[allow(dead_code)]
 pub struct Matrix3x3 {
     pub data: [i16; 9],
 }
 
+#[allow(dead_code)]
 impl Matrix3x3 {
     pub fn new(elevations: [i16; 9]) -> Matrix3x3 {
         Matrix3x3 { data: elevations }
@@ -42,6 +44,7 @@ impl Matrix3x3 {
     }
 }
 
+#[allow(dead_code)]
 pub fn calculate_pq_1(d: i16, e: &Matrix3x3) -> (f32, f32) {
     let p = (((e.height_br() + 2 * e.height_cr() + e.height_tr())
         - (e.height_bl() + 2 * e.height_cl() + e.height_tl()))
@@ -54,6 +57,7 @@ pub fn calculate_pq_1(d: i16, e: &Matrix3x3) -> (f32, f32) {
     (p, q)
 }
 
+#[allow(dead_code)]
 pub fn calculate_pq_2(e: &Matrix3x3) -> (i16, i16) {
     let p_prime = (e.height_br() + 2 * e.height_cr() + e.height_tr())
         - (e.height_bl() + 2 * e.height_cl() + e.height_tl());
@@ -62,10 +66,12 @@ pub fn calculate_pq_2(e: &Matrix3x3) -> (i16, i16) {
     (p_prime, q_prime)
 }
 
+#[allow(dead_code)]
 pub fn calculate_slope_1(p: f32, q: f32) -> f32 {
     rad_to_deg((p * p + q * q).sqrt().atan())
 }
 
+#[allow(dead_code)]
 pub fn calculate_slope_2(d: i16, p_prime: i16, q_prime: i16) -> f32 {
     let p_prime_32 = p_prime as f32;
     let q_prime_32 = q_prime as f32;
@@ -76,6 +82,7 @@ pub fn calculate_slope_2(d: i16, p_prime: i16, q_prime: i16) -> f32 {
     rad_to_deg(slope.atan())
 }
 
+#[allow(dead_code)]
 pub fn calculate_slope_3(zoom_level: i16, p_prime: i16, q_prime: i16) -> f32 {
     let p_prime_32 = p_prime as f32;
     let q_prime_32 = q_prime as f32;
@@ -86,6 +93,7 @@ pub fn calculate_slope_3(zoom_level: i16, p_prime: i16, q_prime: i16) -> f32 {
     rad_to_deg(slope.atan())
 }
 
+#[allow(dead_code)]
 pub fn calculate_aspect_1(p: f32, q: f32) -> f32 {
     let aspect = q.atan2(p);
     if aspect < 0. {
@@ -95,6 +103,7 @@ pub fn calculate_aspect_1(p: f32, q: f32) -> f32 {
     }
 }
 
+#[allow(dead_code)]
 pub fn calculate_aspect_2(p_prime: i16, q_prime: i16) -> f32 {
     let aspect = (q_prime as f32).atan2(p_prime as f32);
     if aspect < 0. {
@@ -104,6 +113,7 @@ pub fn calculate_aspect_2(p_prime: i16, q_prime: i16) -> f32 {
     }
 }
 
+#[allow(dead_code)]
 pub fn diff_between_angles_deg(a: i16, b: i16) -> i16 {
     let diff = (a - b).abs();
     if diff > 180 {
@@ -113,6 +123,7 @@ pub fn diff_between_angles_deg(a: i16, b: i16) -> i16 {
     }
 }
 
+#[allow(dead_code)]
 pub fn hillshading_1(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     let slope_light_intensity = (90. - slope as f32) / 90.;
     let aspect_diff = diff_between_angles_deg(aspect, sun_azimuth);
@@ -122,6 +133,7 @@ pub fn hillshading_1(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     color
 }
 
+#[allow(dead_code)]
 pub fn hillshading_2(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     let slope_light_intensity = (90 - slope as i32) * 255 / 90;
     let aspect_diff = diff_between_angles_deg(aspect, sun_azimuth);
@@ -132,6 +144,7 @@ pub fn hillshading_2(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     color
 }
 
+#[allow(dead_code)]
 pub fn hillshading_3(sun_azimuth: i16, slope: i16, aspect: i16) -> i16 {
     let slope_light_intensity = ((90 - slope as i32) << 8) / 90;
     let aspect_diff = diff_between_angles_deg(aspect, sun_azimuth);
