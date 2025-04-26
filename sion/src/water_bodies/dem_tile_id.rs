@@ -31,8 +31,16 @@ impl FromStr for DemTileId {
 
         // todo 2: this should be case insensitive
         // Adjust the sign of the coordinates based on the hemisphere
-        let lon = if &tile_name[3..4] == "E" { lon } else { -lon };
-        let lat = if &tile_name[0..1] == "N" { lat } else { -lat };
+        let lon = if &tile_name[3..4].to_uppercase() == "E" {
+            lon
+        } else {
+            -lon
+        };
+        let lat = if &tile_name[0..1].to_uppercase() == "N" {
+            lat
+        } else {
+            -lat
+        };
 
         Ok(DemTileId { lon, lat })
     }
@@ -62,6 +70,11 @@ mod tests {
         assert_eq!(tile_id.lat, 54);
         assert_eq!(tile_id.to_string(), "N54E168");
 
+        let tile_id: DemTileId = "n54e168".parse().unwrap();
+        assert_eq!(tile_id.lon, 168);
+        assert_eq!(tile_id.lat, 54);
+        assert_eq!(tile_id.to_string(), "N54E168");
+
         let tile_id: DemTileId = "S54W168".parse().unwrap();
         assert_eq!(tile_id.lon, -168);
         assert_eq!(tile_id.lat, -54);
@@ -77,4 +90,6 @@ mod tests {
         assert_eq!(tile_id.lat, -54);
         assert_eq!(tile_id.to_string(), "S54E168");
     }
+
+    // todo 1: negative tests
 }

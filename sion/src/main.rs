@@ -21,7 +21,6 @@ fn main() {
 
     match &cli.command {
         Commands::GenerateTile { tile_id } => {
-            // todo 0: prepare function skeleton for generating water bodies tile
             match generate_water_bodies_tile(tile_id) {
                 Ok(_) => println!("Water bodies tile generated successfully."),
                 Err(e) => {
