@@ -27,6 +27,15 @@
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/benches" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
@@ -48,6 +57,24 @@
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/sion/tests" isTestSource="true" />
@@ -85,6 +112,15 @@
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/cache" />
       <excludeFolder url="file://$MODULE_DIR$/sion/output" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
+      <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />
       <excludeFolder url="file://$MODULE_DIR$/sion/target" />

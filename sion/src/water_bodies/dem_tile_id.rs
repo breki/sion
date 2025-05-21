@@ -29,7 +29,6 @@ impl FromStr for DemTileId {
             .parse::<i16>()
             .map_err(|e| format!("Failed to parse longitude: {}", e))?;
 
-        // todo 2: this should be case insensitive
         // Adjust the sign of the coordinates based on the hemisphere
         let lon = if &tile_name[3..4].to_uppercase() == "E" {
             lon
@@ -92,4 +91,9 @@ mod tests {
     }
 
     // todo 1: negative tests
+    #[test]
+    fn invalid_cardinal_direction() {
+        let result = "N54X168".parse::<DemTileId>();
+        assert!(result.is_err());
+    }
 }
