@@ -6,6 +6,7 @@ pub mod errors;
 pub mod geo;
 pub mod grayscale8_bitmap;
 pub mod hillshading;
+pub mod maxx_sim;
 pub mod mono_bitmap;
 pub mod proj;
 pub mod raster16;
