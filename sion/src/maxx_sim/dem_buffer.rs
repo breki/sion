@@ -149,9 +149,25 @@ pub struct TileSlice {
     pub slice_height: i32,
 }
 
+#[derive(PartialEq)]
+enum BufferState {
+    Uninitialized,
+    Initialized,
+}
+
+#[derive(PartialEq)]
+enum BufferUpdateDecision {
+    _None,
+    _PartialUpdatePerformed,
+    EntireBufferReloadRequired,
+}
+
 pub struct DemBuffer {
     pub width: i32,
     pub height: i32,
+
+    state: BufferState,
+
     // data: Box<[u8]>,
     center_global_cell_lon: GlobalCell,
     center_global_cell_lat: GlobalCell,
@@ -171,6 +187,7 @@ impl DemBuffer {
         DemBuffer {
             width,
             height,
+            state: BufferState::Uninitialized,
             // data,
             center_global_cell_lon: GlobalCell::new(0),
             center_global_cell_lat: GlobalCell::new(0),
@@ -183,7 +200,35 @@ impl DemBuffer {
     }
 
     pub fn update_map_position(&mut self, lon: &Deg, lat: &Deg) {
-        self.reload_entire_buffer(lon, lat);
+        let mut full_update_needed = self.state == BufferState::Uninitialized;
+
+        if self.state == BufferState::Initialized {
+            let update_required = self.is_buffer_update_required(lon, lat);
+            if update_required {
+                let update_decision = self.update_buffer(lon, lat);
+                if update_decision
+                    == BufferUpdateDecision::EntireBufferReloadRequired
+                {
+                    full_update_needed = true;
+                }
+            }
+        }
+
+        if full_update_needed {
+            self.reload_entire_buffer(lon, lat);
+        }
+    }
+
+    fn is_buffer_update_required(&self, _lon: &Deg, _lat: &Deg) -> bool {
+        true
+    }
+
+    fn update_buffer(
+        &mut self,
+        _lon: &Deg,
+        _lat: &Deg,
+    ) -> BufferUpdateDecision {
+        panic!("Not implemented yet");
     }
 
     fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
@@ -276,6 +321,8 @@ impl DemBuffer {
                 }
             }
         }
+
+        self.state = BufferState::Initialized;
     }
 
     fn load_tile_slice(&mut self, slice: &TileSlice) {
@@ -288,7 +335,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_dem_buffer() {
+    fn test_initial_loading() {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
 
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
