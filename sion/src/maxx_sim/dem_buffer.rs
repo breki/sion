@@ -505,23 +505,23 @@ impl DemBuffer {
 
     fn move_dem_block(
         &mut self,
-        _source_x0: i32,
-        _source_y0: i32,
-        _block_width: i32,
-        _block_height: i32,
-        _dest_x0: i32,
-        _dest_y0: i32,
+        source_x0: i32,
+        source_y0: i32,
+        block_width: i32,
+        block_height: i32,
+        dest_x0: i32,
+        dest_y0: i32,
     ) {
         // Here we would implement the logic to move the DEM block
         // from the source coordinates to the destination coordinates.
         // This is a placeholder implementation.
         self.block_move = Some(BlockMove {
-            source_x0: _source_x0,
-            source_y0: _source_y0,
-            block_width: _block_width,
-            block_height: _block_height,
-            dest_x0: _dest_x0,
-            dest_y0: _dest_y0,
+            source_x0,
+            source_y0,
+            block_width,
+            block_height,
+            dest_x0,
+            dest_y0,
         });
     }
 
