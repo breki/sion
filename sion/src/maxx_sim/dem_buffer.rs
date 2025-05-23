@@ -276,7 +276,7 @@ impl PartialEq for BlockMove {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BufferState {
     Uninitialized,
     Initialized,
@@ -390,6 +390,110 @@ impl DemBuffer {
                 < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
             || south_edge_distance_in_pixels
                 < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
+    }
+
+    fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
+        self.center_global_cell_lon = GlobalCell::from_degrees(lon);
+        self.center_global_cell_lat = GlobalCell::from_degrees(lat);
+
+        self.buffer_west_edge_grid = &Grid::from_degrees(lon)
+            - ((self.width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
+        self.buffer_east_edge_grid = &self.buffer_west_edge_grid
+            + (self.width << GRID_UNITS_PER_DEM_CELL_BITS);
+        self.buffer_north_edge_grid = &Grid::from_degrees(lat)
+            + ((self.height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
+        self.buffer_south_edge_grid = &self.buffer_north_edge_grid
+            - (self.height << GRID_UNITS_PER_DEM_CELL_BITS);
+
+        // Calculate the maximum pixel size so we can use it when map position
+        // is moved to determine whether the DEM buffer needs to be updated.
+        let (hpixel_size, vpixel_size) = calculate_pixel_size_in_grid_units(
+            lat.to_radians(),
+            MAX_PIXELS_PER_METER,
+        );
+
+        self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
+        self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
+
+        // the global cell coordinates of the left (west) edge of the buffer
+        let buffer_west_edge_global_cell =
+            &self.buffer_west_edge_grid.to_global_cell();
+
+        // the top-left corner of the tile slice in the buffer coordinates
+        let mut slice_west_edge_global_cell =
+            buffer_west_edge_global_cell.clone();
+        let mut slice_north_edge_global_cell =
+            self.buffer_north_edge_grid.to_global_cell();
+
+        // the buffer coordinates of the top-left corner of the tile slice
+        let mut slice_buffer_x0 = 0;
+        let mut slice_buffer_y0 = 0;
+
+        let mut next_slice_available = true;
+
+        while next_slice_available {
+            // calculate the tile ID of the current slice
+            let tile_lon_deg =
+                slice_west_edge_global_cell.to_tile_degrees().to_int();
+            let tile_lat_deg =
+                slice_north_edge_global_cell.to_tile_degrees().to_int();
+
+            // now we know which tile it is
+            let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
+
+            // calculate the local cell coordinates of the current slice's
+            // top-left corner
+            let slice_tile_x0 = slice_west_edge_global_cell.to_local_cell_lon();
+            let slice_tile_y0 =
+                slice_north_edge_global_cell.to_local_cell_lat();
+
+            // calculate the size of the tile slice to be loaded
+            let slice_width = min(
+                self.width - slice_buffer_x0,
+                DEM_TILE_SIZE - slice_tile_x0.value,
+            );
+
+            let slice_height = min(
+                self.height - slice_buffer_y0,
+                DEM_TILE_SIZE - slice_tile_y0.value,
+            );
+
+            self.load_tile_slice(&TileSlice {
+                tile_key,
+                slice_buffer_x0,
+                slice_buffer_y0,
+                slice_tile_x0,
+                slice_tile_y0,
+                slice_width,
+                slice_height,
+            });
+
+            // try to move to the next slice to the right
+            slice_buffer_x0 += slice_width;
+            slice_west_edge_global_cell =
+                &slice_west_edge_global_cell + slice_width;
+
+            if slice_buffer_x0 >= self.width {
+                // if we reached the right edge of the buffer...
+
+                // "carriage return" to the left edge of the buffer...
+                slice_buffer_x0 = 0;
+                slice_west_edge_global_cell =
+                    buffer_west_edge_global_cell.clone();
+
+                // ...and move to the next slice to the bottom
+                slice_buffer_y0 += slice_height;
+                slice_north_edge_global_cell =
+                    &slice_north_edge_global_cell - slice_height;
+
+                if slice_buffer_y0 >= self.height {
+                    // if we reached the bottom edge of the buffer, we are done
+                    next_slice_available = false;
+                }
+            }
+        }
+
+        self.state = BufferState::Initialized;
     }
 
     fn try_partial_update(
@@ -525,110 +629,6 @@ impl DemBuffer {
         });
     }
 
-    fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
-        self.center_global_cell_lon = GlobalCell::from_degrees(lon);
-        self.center_global_cell_lat = GlobalCell::from_degrees(lat);
-
-        self.buffer_west_edge_grid = &Grid::from_degrees(lon)
-            - ((self.width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_east_edge_grid = &self.buffer_west_edge_grid
-            + (self.width << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_north_edge_grid = &Grid::from_degrees(lat)
-            + ((self.height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_south_edge_grid = &self.buffer_north_edge_grid
-            - (self.height << GRID_UNITS_PER_DEM_CELL_BITS);
-
-        // Calculate the maximum pixel size so we can use it when map position
-        // is moved to determine whether the DEM buffer needs to be updated.
-        let (hpixel_size, vpixel_size) = calculate_pixel_size_in_grid_units(
-            lat.to_radians(),
-            MAX_PIXELS_PER_METER,
-        );
-
-        self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
-        self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
-
-        // the global cell coordinates of the left (west) edge of the buffer
-        let buffer_west_edge_global_cell =
-            &self.buffer_west_edge_grid.to_global_cell();
-
-        // the top-left corner of the tile slice in the buffer coordinates
-        let mut slice_west_edge_global_cell =
-            buffer_west_edge_global_cell.clone();
-        let mut slice_north_edge_global_cell =
-            self.buffer_north_edge_grid.to_global_cell();
-
-        // the buffer coordinates of the top-left corner of the tile slice
-        let mut slice_buffer_x0 = 0;
-        let mut slice_buffer_y0 = 0;
-
-        let mut next_slice_available = true;
-
-        while next_slice_available {
-            // calculate the tile ID of the current slice
-            let tile_lon_deg =
-                slice_west_edge_global_cell.to_tile_degrees().to_int();
-            let tile_lat_deg =
-                slice_north_edge_global_cell.to_tile_degrees().to_int();
-
-            // now we know which tile it is
-            let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
-
-            // calculate the local cell coordinates of the current slice's
-            // top-left corner
-            let slice_tile_x0 = slice_west_edge_global_cell.to_local_cell_lon();
-            let slice_tile_y0 =
-                slice_north_edge_global_cell.to_local_cell_lat();
-
-            // calculate the size of the tile slice to be loaded
-            let slice_width = min(
-                self.width - slice_buffer_x0,
-                DEM_TILE_SIZE - slice_tile_x0.value,
-            );
-
-            let slice_height = min(
-                self.height - slice_buffer_y0,
-                DEM_TILE_SIZE - slice_tile_y0.value,
-            );
-
-            self.load_tile_slice(&TileSlice {
-                tile_key,
-                slice_buffer_x0,
-                slice_buffer_y0,
-                slice_tile_x0,
-                slice_tile_y0,
-                slice_width,
-                slice_height,
-            });
-
-            // try to move to the next slice to the right
-            slice_buffer_x0 += slice_width;
-            slice_west_edge_global_cell =
-                &slice_west_edge_global_cell + slice_width;
-
-            if slice_buffer_x0 >= self.width {
-                // if we reached the right edge of the buffer...
-
-                // "carriage return" to the left edge of the buffer...
-                slice_buffer_x0 = 0;
-                slice_west_edge_global_cell =
-                    buffer_west_edge_global_cell.clone();
-
-                // ...and move to the next slice to the bottom
-                slice_buffer_y0 += slice_height;
-                slice_north_edge_global_cell =
-                    &slice_north_edge_global_cell - slice_height;
-
-                if slice_buffer_y0 >= self.height {
-                    // if we reached the bottom edge of the buffer, we are done
-                    next_slice_available = false;
-                }
-            }
-        }
-
-        self.state = BufferState::Initialized;
-    }
-
     fn load_tile_slice(&mut self, slice: &TileSlice) {
         self.slices_loaded.push(slice.clone());
     }
@@ -648,6 +648,8 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
 
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
 
         assert_eq!(dem_buffer.block_move, None);
         assert_eq!(dem_buffer.slices_loaded.len(), 4);
@@ -713,6 +715,8 @@ mod tests {
         // Simulate an update with no movement
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
         assert_eq!(dem_buffer.block_move, None);
         assert_eq!(dem_buffer.slices_loaded.len(), 0);
     }
@@ -724,6 +728,8 @@ mod tests {
 
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
 
         // todo 2: this condition will be true once we implement the partial
         // loading of DEM data
@@ -748,6 +754,8 @@ mod tests {
 
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(9.0), &Deg::new(46.64649));
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
 
         assert_eq!(dem_buffer.block_move, None);
         assert_eq!(dem_buffer.slices_loaded.len(), 4);
