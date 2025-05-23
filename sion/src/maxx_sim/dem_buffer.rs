@@ -128,7 +128,7 @@ impl Sub<i32> for &GlobalCell {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LocalCell {
     pub value: i32,
 }
@@ -232,7 +232,7 @@ fn calculate_pixel_size_in_grid_units(
     (horizontal, vertical)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TileSlice {
     pub tile_key: TileKey,
     pub slice_buffer_x0: i32,
@@ -649,43 +649,60 @@ mod tests {
 
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert_eq!(dem_buffer.block_move, None);
         assert_eq!(dem_buffer.slices_loaded.len(), 4);
 
-        let slice = &dem_buffer.slices_loaded[0];
-        assert_eq!(slice.tile_key, TileKey::from_lon_lat(7, 47));
-        assert_eq!(slice.slice_buffer_x0, 0);
-        assert_eq!(slice.slice_buffer_y0, 0);
-        assert_eq!(slice.slice_tile_x0.value, 179);
-        assert_eq!(slice.slice_tile_y0.value, 1436);
-        assert_eq!(slice.slice_width, 1621);
-        assert_eq!(slice.slice_height, 364);
+        assert_eq!(
+            dem_buffer.slices_loaded[0],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(7, 47),
+                slice_buffer_x0: 0,
+                slice_buffer_y0: 0,
+                slice_tile_x0: LocalCell::new(179),
+                slice_tile_y0: LocalCell::new(1436),
+                slice_width: 1621,
+                slice_height: 364,
+            }
+        );
 
-        let slice = &dem_buffer.slices_loaded[1];
-        assert_eq!(slice.tile_key, TileKey::from_lon_lat(8, 47));
-        assert_eq!(slice.slice_buffer_x0, 1621);
-        assert_eq!(slice.slice_buffer_y0, 0);
-        assert_eq!(slice.slice_tile_x0.value, 0);
-        assert_eq!(slice.slice_tile_y0.value, 1436);
-        assert_eq!(slice.slice_width, 379);
-        assert_eq!(slice.slice_height, 364);
+        assert_eq!(
+            dem_buffer.slices_loaded[1],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(8, 47),
+                slice_buffer_x0: 1621,
+                slice_buffer_y0: 0,
+                slice_tile_x0: LocalCell::new(0),
+                slice_tile_y0: LocalCell::new(1436),
+                slice_width: 379,
+                slice_height: 364,
+            }
+        );
 
-        let slice = &dem_buffer.slices_loaded[2];
-        assert_eq!(slice.tile_key, TileKey::from_lon_lat(7, 46));
-        assert_eq!(slice.slice_buffer_x0, 0);
-        assert_eq!(slice.slice_buffer_y0, 364);
-        assert_eq!(slice.slice_tile_x0.value, 179);
-        assert_eq!(slice.slice_tile_y0.value, 0);
-        assert_eq!(slice.slice_width, 1621);
-        assert_eq!(slice.slice_height, 1636);
+        assert_eq!(
+            dem_buffer.slices_loaded[2],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(7, 46),
+                slice_buffer_x0: 0,
+                slice_buffer_y0: 364,
+                slice_tile_x0: LocalCell::new(179),
+                slice_tile_y0: LocalCell::new(0),
+                slice_width: 1621,
+                slice_height: 1636,
+            }
+        );
 
-        let slice = &dem_buffer.slices_loaded[3];
-        assert_eq!(slice.tile_key, TileKey::from_lon_lat(8, 46));
-        assert_eq!(slice.slice_buffer_x0, 1621);
-        assert_eq!(slice.slice_buffer_y0, 364);
-        assert_eq!(slice.slice_tile_x0.value, 0);
-        assert_eq!(slice.slice_tile_y0.value, 0);
-        assert_eq!(slice.slice_width, 379);
-        assert_eq!(slice.slice_height, 1636);
+        assert_eq!(
+            dem_buffer.slices_loaded[3],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(8, 46),
+                slice_buffer_x0: 1621,
+                slice_buffer_y0: 364,
+                slice_tile_x0: LocalCell::new(0),
+                slice_tile_y0: LocalCell::new(0),
+                slice_width: 379,
+                slice_height: 1636,
+            }
+        );
     }
 
     #[test]
@@ -696,8 +713,8 @@ mod tests {
         // Simulate an update with no movement
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
-        assert_eq!(dem_buffer.slices_loaded.len(), 0);
         assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 0);
     }
 
     #[test]
@@ -711,7 +728,17 @@ mod tests {
         // todo 2: this condition will be true once we implement the partial
         // loading of DEM data
         // assert!(dem_buffer.slices_loaded.len() > 0);
-        assert_ne!(dem_buffer.block_move, None);
+        assert_eq!(
+            dem_buffer.block_move,
+            Some(BlockMove {
+                source_x0: 621,
+                source_y0: 0,
+                block_width: 1379,
+                block_height: 2000,
+                dest_x0: 0,
+                dest_y0: 0
+            })
+        );
     }
 
     #[test]
@@ -722,7 +749,7 @@ mod tests {
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(9.0), &Deg::new(46.64649));
 
-        assert_eq!(dem_buffer.slices_loaded.len(), 4);
         assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
     }
 }
