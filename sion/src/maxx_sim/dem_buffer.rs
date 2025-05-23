@@ -1,5 +1,8 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::ops::{Add, Sub};
+
+pub const EARTH_RADIUS_METERS: f32 = 6378137.0;
+pub const EARTH_CIRCUMFERENCE_METERS: f32 = 2.0 * PI * EARTH_RADIUS_METERS;
 
 pub const GRID_UNITS_PER_DEM_CELL_BITS: i32 = 8;
 pub const GRID_UNITS_PER_DEM_CELL: i32 = 1 << GRID_UNITS_PER_DEM_CELL_BITS;
@@ -7,6 +10,8 @@ pub const GRID_UNITS_PER_DEM_CELL: i32 = 1 << GRID_UNITS_PER_DEM_CELL_BITS;
 pub const DEM_TILE_SIZE: i32 = 1800;
 pub const DEM_TILE_SIZE_IN_GRID_CELLS: i32 =
     DEM_TILE_SIZE * GRID_UNITS_PER_DEM_CELL;
+
+pub const MAX_PIXELS_PER_METER: f32 = 45.0;
 
 #[derive(Clone)]
 pub struct Deg {
@@ -20,6 +25,10 @@ impl Deg {
 
     pub fn to_int(&self) -> i32 {
         self.value as i32
+    }
+
+    pub fn to_radians(&self) -> f32 {
+        self.value * (PI / 180.0)
     }
 }
 
@@ -50,6 +59,39 @@ impl GlobalCell {
     }
 }
 
+use std::cmp::Ordering;
+use std::f32::consts::PI;
+
+impl PartialEq for GlobalCell {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Eq for GlobalCell {}
+
+impl PartialOrd for GlobalCell {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for GlobalCell {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.value.cmp(&other.value)
+    }
+}
+
+impl Add<GlobalCell> for &GlobalCell {
+    type Output = GlobalCell;
+
+    fn add(self, other: GlobalCell) -> GlobalCell {
+        GlobalCell {
+            value: self.value + other.value,
+        }
+    }
+}
+
 impl Add<i32> for &GlobalCell {
     type Output = GlobalCell;
 
@@ -57,6 +99,22 @@ impl Add<i32> for &GlobalCell {
         GlobalCell {
             value: self.value + other,
         }
+    }
+}
+
+impl Sub<&GlobalCell> for &GlobalCell {
+    type Output = i32;
+
+    fn sub(self, other: &GlobalCell) -> i32 {
+        self.value - other.value
+    }
+}
+
+impl Sub for GlobalCell {
+    type Output = i32;
+
+    fn sub(self, other: GlobalCell) -> i32 {
+        self.value - other.value
     }
 }
 
@@ -138,6 +196,28 @@ impl PartialEq for TileKey {
     }
 }
 
+fn calculate_pixel_size_in_grid_units(
+    latitude_rad: f32,
+    zoom_meters_per_pixel: f32,
+) -> (i32, i32) {
+    let latitude_cos = latitude_rad.cos();
+    let circumference_at_latitude = EARTH_CIRCUMFERENCE_METERS * latitude_cos;
+    let longitude_degree_length_in_meters_at_latitude =
+        circumference_at_latitude / 360.0;
+    let dem_cell_horiz_length_in_meters_at_latitude =
+        longitude_degree_length_in_meters_at_latitude / DEM_TILE_SIZE as f32;
+    let grid_unit_horiz_length_in_meters_at_latitude =
+        dem_cell_horiz_length_in_meters_at_latitude / 256.0;
+    let pixel_size_in_meters = zoom_meters_per_pixel;
+
+    let horizontal = (pixel_size_in_meters
+        / grid_unit_horiz_length_in_meters_at_latitude)
+        .round() as i32;
+    let vertical = (horizontal as f32 * latitude_cos).round() as i32;
+
+    (horizontal, vertical)
+}
+
 #[derive(Clone)]
 pub struct TileSlice {
     pub tile_key: TileKey,
@@ -157,8 +237,7 @@ enum BufferState {
 
 #[derive(PartialEq)]
 enum BufferUpdateDecision {
-    _None,
-    _PartialUpdatePerformed,
+    PartialUpdatePerformed,
     EntireBufferReloadRequired,
 }
 
@@ -177,6 +256,9 @@ pub struct DemBuffer {
     buffer_north_edge_grid: Grid,
     buffer_south_edge_grid: Grid,
 
+    horizontal_max_pixel_size_in_grids: Grid,
+    vertical_max_pixel_size_in_grids: Grid,
+
     pub slices_loaded: Vec<TileSlice>,
 }
 
@@ -191,15 +273,22 @@ impl DemBuffer {
             // data,
             center_global_cell_lon: GlobalCell::new(0),
             center_global_cell_lat: GlobalCell::new(0),
+
             buffer_west_edge_grid: Grid::new(0),
             buffer_east_edge_grid: Grid::new(0),
             buffer_north_edge_grid: Grid::new(0),
             buffer_south_edge_grid: Grid::new(0),
+
+            horizontal_max_pixel_size_in_grids: Grid::new(0),
+            vertical_max_pixel_size_in_grids: Grid::new(0),
+
             slices_loaded: Vec::new(),
         }
     }
 
     pub fn update_map_position(&mut self, lon: &Deg, lat: &Deg) {
+        self.clear_slices_loaded();
+
         let mut full_update_needed = self.state == BufferState::Uninitialized;
 
         if self.state == BufferState::Initialized {
@@ -220,15 +309,121 @@ impl DemBuffer {
     }
 
     fn is_buffer_update_required(&self, _lon: &Deg, _lat: &Deg) -> bool {
-        true
+        panic!("is_buffer_update_required not implemented");
     }
 
-    fn update_buffer(
-        &mut self,
-        _lon: &Deg,
-        _lat: &Deg,
-    ) -> BufferUpdateDecision {
-        panic!("Not implemented yet");
+    fn update_buffer(&mut self, lon: &Deg, lat: &Deg) -> BufferUpdateDecision {
+        let new_buffer_west_edge_grid =
+            &Grid::from_degrees(lon) - ((self.width / 2) << 8);
+        let new_buffer_east_edge_grid =
+            &new_buffer_west_edge_grid + (self.width << 8);
+        let new_buffer_north_edge_grid =
+            &Grid::from_degrees(lat) + ((self.height / 2) << 8);
+        let new_buffer_south_edge_grid =
+            &new_buffer_north_edge_grid - (self.height << 8);
+
+        // Get the coordinates of the edges of the buffer once the buffer
+        // has been moved to the new position.
+        let new_buffer_west_edge_global_cell =
+            new_buffer_west_edge_grid.to_global_cell();
+        let new_buffer_east_edge_global_cell =
+            new_buffer_east_edge_grid.to_global_cell();
+        let new_buffer_north_edge_global_cell =
+            new_buffer_north_edge_grid.to_global_cell();
+        let new_buffer_south_edge_global_cell =
+            new_buffer_south_edge_grid.to_global_cell();
+
+        // Calculate the intersection area between the DEM buffer in its
+        // current position and the new position.
+        let intersection_west_edge = GlobalCell::new(max(
+            self.buffer_west_edge_grid.to_global_cell().value,
+            new_buffer_west_edge_global_cell.value,
+        ));
+
+        let intersection_east_edge = GlobalCell::new(min(
+            self.buffer_east_edge_grid.to_global_cell().value,
+            new_buffer_east_edge_global_cell.value,
+        ));
+
+        let intersection_north_edge = GlobalCell::new(min(
+            self.buffer_north_edge_grid.to_global_cell().value,
+            new_buffer_north_edge_global_cell.value,
+        ));
+
+        let intersection_south_edge = GlobalCell::new(max(
+            self.buffer_south_edge_grid.to_global_cell().value,
+            new_buffer_south_edge_global_cell.value,
+        ));
+
+        // Now calculate the top-left corner of the intersection in the
+        // buffer's local coordinates.
+        let source_x0 = &intersection_west_edge
+            - &self.buffer_west_edge_grid.to_global_cell();
+        let source_y0 = &self.buffer_north_edge_grid.to_global_cell()
+            - &intersection_north_edge;
+
+        // Also calculate the width and height of the intersection.
+        let block_width = &intersection_east_edge - &intersection_west_edge;
+        let block_height = &intersection_north_edge - &intersection_south_edge;
+
+        let update_decision;
+
+        // is there actually any intersection?
+        if block_width >= 0 && block_height >= 0 {
+            // if there is an intersection, we can perform a partial update
+            update_decision = BufferUpdateDecision::PartialUpdatePerformed;
+
+            // And now calculate the coordinates of the intersection, but this
+            // time in the local coordinates of the buffer after it has been moved
+            // to a new location. This will serve as the destination coordinates
+            // where the intersection area will be copied to.
+            let dest_x0 =
+                &intersection_west_edge - &new_buffer_west_edge_global_cell;
+            let dest_y0 =
+                &new_buffer_north_edge_global_cell - &intersection_north_edge;
+
+            self.move_dem_block(
+                source_x0,
+                source_y0,
+                block_width,
+                block_height,
+                dest_x0,
+                dest_y0,
+            );
+
+            // update the buffer's fields
+            self.center_global_cell_lon = GlobalCell::from_degrees(lon);
+            self.center_global_cell_lat = GlobalCell::from_degrees(lat);
+
+            let (hpixel_size, vpixel_size) = calculate_pixel_size_in_grid_units(
+                lat.to_radians(),
+                MAX_PIXELS_PER_METER,
+            );
+
+            self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
+            self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
+
+            self.buffer_north_edge_grid = new_buffer_north_edge_grid;
+            self.buffer_south_edge_grid = new_buffer_south_edge_grid;
+            self.buffer_west_edge_grid = new_buffer_west_edge_grid;
+            self.buffer_east_edge_grid = new_buffer_east_edge_grid;
+        } else {
+            // if there is no intersection, we need to do a full buffer reload
+            update_decision = BufferUpdateDecision::EntireBufferReloadRequired;
+        }
+
+        update_decision
+    }
+
+    fn move_dem_block(
+        &self,
+        _source_x0: i32,
+        _source_y0: i32,
+        _block_width: i32,
+        _block_height: i32,
+        _dest_x0: i32,
+        _dest_y0: i32,
+    ) {
     }
 
     fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
@@ -328,6 +523,10 @@ impl DemBuffer {
     fn load_tile_slice(&mut self, slice: &TileSlice) {
         self.slices_loaded.push(slice.clone());
     }
+
+    fn clear_slices_loaded(&mut self) {
+        self.slices_loaded.clear();
+    }
 }
 
 #[cfg(test)]
@@ -377,5 +576,27 @@ mod tests {
         assert_eq!(slice.slice_tile_y0.value, 0);
         assert_eq!(slice.slice_width, 379);
         assert_eq!(slice.slice_height, 1636);
+    }
+
+    #[test]
+    fn test_no_update_is_required_if_no_movement() {
+        let mut dem_buffer = DemBuffer::new(2000, 2000);
+        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        assert_eq!(dem_buffer.slices_loaded.len(), 0);
+    }
+
+    #[test]
+    fn test_partial_update_is_required() {
+        let mut dem_buffer = DemBuffer::new(2000, 2000);
+        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(&Deg::new(7.7), &Deg::new(46.7));
+
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
     }
 }
