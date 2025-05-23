@@ -139,6 +139,12 @@ impl LocalCell {
     }
 }
 
+impl PartialEq for LocalCell {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
 #[derive(Clone)]
 pub struct Grid {
     pub value: i32,
@@ -237,7 +243,19 @@ pub struct TileSlice {
     pub slice_height: i32,
 }
 
-#[derive(Clone)]
+impl PartialEq for TileSlice {
+    fn eq(&self, other: &Self) -> bool {
+        self.tile_key == other.tile_key
+            && self.slice_buffer_x0 == other.slice_buffer_x0
+            && self.slice_buffer_y0 == other.slice_buffer_y0
+            && self.slice_tile_x0 == other.slice_tile_x0
+            && self.slice_tile_y0 == other.slice_tile_y0
+            && self.slice_width == other.slice_width
+            && self.slice_height == other.slice_height
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct BlockMove {
     pub source_x0: i32,
     pub source_y0: i32,
@@ -245,6 +263,17 @@ pub struct BlockMove {
     pub block_height: i32,
     pub dest_x0: i32,
     pub dest_y0: i32,
+}
+
+impl PartialEq for BlockMove {
+    fn eq(&self, other: &Self) -> bool {
+        self.source_x0 == other.source_x0
+            && self.source_y0 == other.source_y0
+            && self.block_width == other.block_width
+            && self.block_height == other.block_height
+            && self.dest_x0 == other.dest_x0
+            && self.dest_y0 == other.dest_y0
+    }
 }
 
 #[derive(PartialEq)]
@@ -425,6 +454,8 @@ impl DemBuffer {
 
         // is there actually any intersection?
         if block_width >= 0 && block_height >= 0 {
+            println!("Intersection found!");
+
             // if there is an intersection, we can perform a partial update
             update_decision = BufferUpdateDecision::PartialUpdatePerformed;
 
@@ -463,6 +494,8 @@ impl DemBuffer {
             self.buffer_west_edge_grid = new_buffer_west_edge_grid;
             self.buffer_east_edge_grid = new_buffer_east_edge_grid;
         } else {
+            println!("No intersection found!");
+
             // if there is no intersection, we need to do a full buffer reload
             update_decision = BufferUpdateDecision::EntireBufferReloadRequired;
         }
@@ -664,6 +697,7 @@ mod tests {
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
         assert_eq!(dem_buffer.slices_loaded.len(), 0);
+        assert_eq!(dem_buffer.block_move, None);
     }
 
     #[test]
@@ -672,8 +706,23 @@ mod tests {
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
         // Simulate a partial update
+        dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
+
+        // todo 2: this condition will be true once we implement the partial
+        // loading of DEM data
+        // assert!(dem_buffer.slices_loaded.len() > 0);
+        assert_ne!(dem_buffer.block_move, None);
+    }
+
+    #[test]
+    fn test_moved_too_far_so_full_reload_is_needed() {
+        let mut dem_buffer = DemBuffer::new(2000, 2000);
+        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(9.0), &Deg::new(46.64649));
 
         assert_eq!(dem_buffer.slices_loaded.len(), 4);
+        assert_eq!(dem_buffer.block_move, None);
     }
 }
