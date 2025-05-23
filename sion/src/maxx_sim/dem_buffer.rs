@@ -597,6 +597,9 @@ impl DemBuffer {
             self.buffer_south_edge_grid = new_buffer_south_edge_grid;
             self.buffer_west_edge_grid = new_buffer_west_edge_grid;
             self.buffer_east_edge_grid = new_buffer_east_edge_grid;
+
+            // todo 0: now load slices from DEM files
+            self.fill_missing_data_after_move();
         } else {
             println!("No intersection found!");
 
@@ -627,6 +630,76 @@ impl DemBuffer {
             dest_x0,
             dest_y0,
         });
+    }
+
+    fn fill_missing_data_after_move(&mut self) {
+        // Iterate over the buffer to find areas not covered by the copied block
+        let mut slice_buffer_x0 = 0;
+        let mut slice_buffer_y0 = 0;
+
+        while slice_buffer_y0 < self.height {
+            while slice_buffer_x0 < self.width {
+                // Check if the current position is already covered by the copied block
+                if let Some(block_move) = &self.block_move {
+                    let is_covered = slice_buffer_x0 >= block_move.dest_x0
+                        && slice_buffer_x0
+                            < block_move.dest_x0 + block_move.block_width
+                        && slice_buffer_y0 >= block_move.dest_y0
+                        && slice_buffer_y0
+                            < block_move.dest_y0 + block_move.block_height;
+
+                    if is_covered {
+                        slice_buffer_x0 += block_move.block_width;
+                        continue;
+                    }
+                }
+
+                // Calculate the tile key and slice details for the missing area
+                let tile_lon_deg =
+                    (self.buffer_west_edge_grid.to_global_cell().value
+                        + slice_buffer_x0)
+                        / DEM_TILE_SIZE;
+                let tile_lat_deg =
+                    (self.buffer_north_edge_grid.to_global_cell().value
+                        - slice_buffer_y0)
+                        / DEM_TILE_SIZE;
+
+                let tile_key =
+                    TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
+
+                let slice_tile_x0 =
+                    LocalCell::new(slice_buffer_x0 % DEM_TILE_SIZE);
+                let slice_tile_y0 =
+                    LocalCell::new(slice_buffer_y0 % DEM_TILE_SIZE);
+
+                let slice_width = min(
+                    self.width - slice_buffer_x0,
+                    DEM_TILE_SIZE - slice_tile_x0.value,
+                );
+                let slice_height = min(
+                    self.height - slice_buffer_y0,
+                    DEM_TILE_SIZE - slice_tile_y0.value,
+                );
+
+                // Load the missing tile slice
+                self.load_tile_slice(&TileSlice {
+                    tile_key,
+                    slice_buffer_x0,
+                    slice_buffer_y0,
+                    slice_tile_x0,
+                    slice_tile_y0,
+                    slice_width,
+                    slice_height,
+                });
+
+                // Move to the next slice to the right
+                slice_buffer_x0 += slice_width;
+            }
+
+            // Move to the next row of slices
+            slice_buffer_x0 = 0;
+            slice_buffer_y0 += DEM_TILE_SIZE;
+        }
     }
 
     fn load_tile_slice(&mut self, slice: &TileSlice) {
@@ -722,32 +795,6 @@ mod tests {
     }
 
     #[test]
-    fn test_partial_update_is_required() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000);
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
-
-        // Simulate a partial update
-        dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
-
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        // todo 2: this condition will be true once we implement the partial
-        // loading of DEM data
-        // assert!(dem_buffer.slices_loaded.len() > 0);
-        assert_eq!(
-            dem_buffer.block_move,
-            Some(BlockMove {
-                source_x0: 621,
-                source_y0: 0,
-                block_width: 1379,
-                block_height: 2000,
-                dest_x0: 0,
-                dest_y0: 0
-            })
-        );
-    }
-
-    #[test]
     fn test_moved_too_far_so_full_reload_is_needed() {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
@@ -759,5 +806,64 @@ mod tests {
 
         assert_eq!(dem_buffer.block_move, None);
         assert_eq!(dem_buffer.slices_loaded.len(), 4);
+    }
+
+    #[test]
+    fn test_partial_update_is_required_to_the_right() {
+        let buffer_size = 2000;
+
+        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size);
+        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
+        let expected_block_width = 1379;
+        let expected_lower_tile_row_y0 = 364;
+        let expected_tile_x0_before_move = 1000;
+        let expected_tile_x0 =
+            expected_block_width - expected_tile_x0_before_move;
+
+        assert_eq!(
+            dem_buffer.block_move,
+            Some(BlockMove {
+                source_x0: 621,
+                source_y0: 0,
+                block_width: expected_block_width,
+                block_height: buffer_size,
+                dest_x0: 0,
+                dest_y0: 0
+            })
+        );
+
+        // assert_eq!(dem_buffer.slices_loaded.len(), 2);
+
+        assert_eq!(
+            dem_buffer.slices_loaded[0],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(8, 47),
+                slice_buffer_x0: expected_block_width,
+                slice_buffer_y0: 0,
+                slice_tile_x0: LocalCell::new(expected_tile_x0),
+                slice_tile_y0: LocalCell::new(1436),
+                slice_width: buffer_size - expected_block_width,
+                slice_height: expected_lower_tile_row_y0,
+            }
+        );
+
+        assert_eq!(
+            dem_buffer.slices_loaded[1],
+            TileSlice {
+                tile_key: TileKey::from_lon_lat(8, 46),
+                slice_buffer_x0: expected_block_width,
+                slice_buffer_y0: expected_lower_tile_row_y0,
+                slice_tile_x0: LocalCell::new(expected_tile_x0),
+                slice_tile_y0: LocalCell::new(0),
+                slice_width: buffer_size - expected_block_width,
+                slice_height: expected_block_width - expected_lower_tile_row_y0,
+            }
+        );
     }
 }
