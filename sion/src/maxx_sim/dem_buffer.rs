@@ -291,8 +291,8 @@ enum BufferUpdateDecision {
 const MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH: i32 = 500;
 
 pub struct DemBuffer {
-    pub width: i32,
-    pub height: i32,
+    pub buffer_width: i32,
+    pub buffer_height: i32,
 
     state: BufferState,
 
@@ -317,8 +317,8 @@ impl DemBuffer {
         // let size = (width * height) as usize;
         // let data = vec![0; size].into_boxed_slice();
         DemBuffer {
-            width,
-            height,
+            buffer_width: width,
+            buffer_height: height,
             state: BufferState::Uninitialized,
             // data,
             center_global_cell_lon: GlobalCell::new(0),
@@ -397,13 +397,13 @@ impl DemBuffer {
         self.center_global_cell_lat = GlobalCell::from_degrees(lat);
 
         self.buffer_west_edge_grid = &Grid::from_degrees(lon)
-            - ((self.width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
+            - ((self.buffer_width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
         self.buffer_east_edge_grid = &self.buffer_west_edge_grid
-            + (self.width << GRID_UNITS_PER_DEM_CELL_BITS);
+            + (self.buffer_width << GRID_UNITS_PER_DEM_CELL_BITS);
         self.buffer_north_edge_grid = &Grid::from_degrees(lat)
-            + ((self.height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
+            + ((self.buffer_height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
         self.buffer_south_edge_grid = &self.buffer_north_edge_grid
-            - (self.height << GRID_UNITS_PER_DEM_CELL_BITS);
+            - (self.buffer_height << GRID_UNITS_PER_DEM_CELL_BITS);
 
         // Calculate the maximum pixel size so we can use it when map position
         // is moved to determine whether the DEM buffer needs to be updated.
@@ -415,83 +415,7 @@ impl DemBuffer {
         self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
         self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
 
-        // the global cell coordinates of the left (west) edge of the buffer
-        let buffer_west_edge_global_cell =
-            &self.buffer_west_edge_grid.to_global_cell();
-
-        // the top-left corner of the tile slice in the buffer coordinates
-        let mut slice_west_edge_global_cell =
-            buffer_west_edge_global_cell.clone();
-        let mut slice_north_edge_global_cell =
-            self.buffer_north_edge_grid.to_global_cell();
-
-        // the buffer coordinates of the top-left corner of the tile slice
-        let mut slice_buffer_x0 = 0;
-        let mut slice_buffer_y0 = 0;
-
-        let mut next_slice_available = true;
-
-        while next_slice_available {
-            // calculate the tile ID of the current slice
-            let tile_lon_deg =
-                slice_west_edge_global_cell.to_tile_degrees().to_int();
-            let tile_lat_deg =
-                slice_north_edge_global_cell.to_tile_degrees().to_int();
-
-            // now we know which tile it is
-            let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
-
-            // calculate the local cell coordinates of the current slice's
-            // top-left corner
-            let slice_tile_x0 = slice_west_edge_global_cell.to_local_cell_lon();
-            let slice_tile_y0 =
-                slice_north_edge_global_cell.to_local_cell_lat();
-
-            // calculate the size of the tile slice to be loaded
-            let slice_width = min(
-                self.width - slice_buffer_x0,
-                DEM_TILE_SIZE - slice_tile_x0.value,
-            );
-
-            let slice_height = min(
-                self.height - slice_buffer_y0,
-                DEM_TILE_SIZE - slice_tile_y0.value,
-            );
-
-            self.load_tile_slice(&TileSlice {
-                tile_key,
-                slice_buffer_x0,
-                slice_buffer_y0,
-                slice_tile_x0,
-                slice_tile_y0,
-                slice_width,
-                slice_height,
-            });
-
-            // try to move to the next slice to the right
-            slice_buffer_x0 += slice_width;
-            slice_west_edge_global_cell =
-                &slice_west_edge_global_cell + slice_width;
-
-            if slice_buffer_x0 >= self.width {
-                // if we reached the right edge of the buffer...
-
-                // "carriage return" to the left edge of the buffer...
-                slice_buffer_x0 = 0;
-                slice_west_edge_global_cell =
-                    buffer_west_edge_global_cell.clone();
-
-                // ...and move to the next slice to the bottom
-                slice_buffer_y0 += slice_height;
-                slice_north_edge_global_cell =
-                    &slice_north_edge_global_cell - slice_height;
-
-                if slice_buffer_y0 >= self.height {
-                    // if we reached the bottom edge of the buffer, we are done
-                    next_slice_available = false;
-                }
-            }
-        }
+        self.update_buffer_area(0, 0, self.buffer_width, self.buffer_height);
 
         self.state = BufferState::Initialized;
     }
@@ -502,13 +426,13 @@ impl DemBuffer {
         lat: &Deg,
     ) -> BufferUpdateDecision {
         let new_buffer_west_edge_grid =
-            &Grid::from_degrees(lon) - ((self.width / 2) << 8);
+            &Grid::from_degrees(lon) - ((self.buffer_width / 2) << 8);
         let new_buffer_east_edge_grid =
-            &new_buffer_west_edge_grid + (self.width << 8);
+            &new_buffer_west_edge_grid + (self.buffer_width << 8);
         let new_buffer_north_edge_grid =
-            &Grid::from_degrees(lat) + ((self.height / 2) << 8);
+            &Grid::from_degrees(lat) + ((self.buffer_height / 2) << 8);
         let new_buffer_south_edge_grid =
-            &new_buffer_north_edge_grid - (self.height << 8);
+            &new_buffer_north_edge_grid - (self.buffer_height << 8);
 
         // Get the coordinates of the edges of the buffer once the buffer
         // has been moved to the new position.
@@ -633,72 +557,116 @@ impl DemBuffer {
     }
 
     fn fill_missing_data_after_move(&mut self) {
-        // Iterate over the buffer to find areas not covered by the copied block
-        let mut slice_buffer_x0 = 0;
-        let mut slice_buffer_y0 = 0;
+        // todo 0: determine the missing area and call update_buffer_area
+        match self.block_move {
+            Some(ref block_move) => {
+                // Calculate the missing area based on the block move
+                let missing_area_x = block_move.block_width;
+                let missing_area_y = 0;
+                let missing_area_width = self.buffer_width - block_move.block_width;
+                let missing_area_height = self.buffer_height;
 
-        while slice_buffer_y0 < self.height {
-            while slice_buffer_x0 < self.width {
-                // Check if the current position is already covered by the copied block
-                if let Some(block_move) = &self.block_move {
-                    let is_covered = slice_buffer_x0 >= block_move.dest_x0
-                        && slice_buffer_x0
-                            < block_move.dest_x0 + block_move.block_width
-                        && slice_buffer_y0 >= block_move.dest_y0
-                        && slice_buffer_y0
-                            < block_move.dest_y0 + block_move.block_height;
-
-                    if is_covered {
-                        slice_buffer_x0 += block_move.block_width;
-                        continue;
-                    }
-                }
-
-                // Calculate the tile key and slice details for the missing area
-                let tile_lon_deg =
-                    (self.buffer_west_edge_grid.to_global_cell().value
-                        + slice_buffer_x0)
-                        / DEM_TILE_SIZE;
-                let tile_lat_deg =
-                    (self.buffer_north_edge_grid.to_global_cell().value
-                        - slice_buffer_y0)
-                        / DEM_TILE_SIZE;
-
-                let tile_key =
-                    TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
-
-                let slice_tile_x0 =
-                    LocalCell::new(slice_buffer_x0 % DEM_TILE_SIZE);
-                let slice_tile_y0 =
-                    LocalCell::new(slice_buffer_y0 % DEM_TILE_SIZE);
-
-                let slice_width = min(
-                    self.width - slice_buffer_x0,
-                    DEM_TILE_SIZE - slice_tile_x0.value,
+                // Update the buffer area with the missing area
+                self.update_buffer_area(
+                    missing_area_x,
+                    missing_area_y,
+                    missing_area_width,
+                    missing_area_height,
                 );
-                let slice_height = min(
-                    self.height - slice_buffer_y0,
-                    DEM_TILE_SIZE - slice_tile_y0.value,
-                );
-
-                // Load the missing tile slice
-                self.load_tile_slice(&TileSlice {
-                    tile_key,
-                    slice_buffer_x0,
-                    slice_buffer_y0,
-                    slice_tile_x0,
-                    slice_tile_y0,
-                    slice_width,
-                    slice_height,
-                });
-
-                // Move to the next slice to the right
-                slice_buffer_x0 += slice_width;
             }
+            None => {
+                panic!("No block move found, this method should not be called in this case.");
+            }
+        }
 
-            // Move to the next row of slices
-            slice_buffer_x0 = 0;
-            slice_buffer_y0 += DEM_TILE_SIZE;
+        // todo 6: now cover all the possible cases of missing areas
+    }
+
+    fn update_buffer_area(
+        &mut self,
+        area_x: i32,
+        area_y: i32,
+        area_width: i32,
+        area_height: i32,
+    ) {
+        // the global cell coordinates of the left (west) edge of the buffer
+        let area_west_edge_global_cell =
+            &self.buffer_west_edge_grid.to_global_cell() + area_x;
+
+        // the top-left corner of the tile slice in the buffer coordinates
+        let mut slice_west_edge_global_cell =
+            area_west_edge_global_cell.clone();
+        let mut slice_north_edge_global_cell =
+            self.buffer_north_edge_grid.to_global_cell();
+
+        // the buffer coordinates of the top-left corner of the tile slice
+        let mut slice_buffer_x0 = area_x;
+        let mut slice_buffer_y0 = area_y;
+
+        let mut next_slice_available = true;
+
+        while next_slice_available {
+            // calculate the tile ID of the current slice
+            let tile_lon_deg =
+                slice_west_edge_global_cell.to_tile_degrees().to_int();
+            let tile_lat_deg =
+                slice_north_edge_global_cell.to_tile_degrees().to_int();
+
+            // now we know which tile it is
+            let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
+
+            // calculate the local cell coordinates of the current slice's
+            // top-left corner
+            let slice_tile_x0 = slice_west_edge_global_cell.to_local_cell_lon();
+            let slice_tile_y0 =
+                slice_north_edge_global_cell.to_local_cell_lat();
+
+            // calculate the size of the tile slice to be loaded
+            let area_x1 = area_x + area_width;
+            let slice_width = min(
+                area_x1 - slice_buffer_x0,
+                DEM_TILE_SIZE - slice_tile_x0.value,
+            );
+
+            let area_y1 = area_y + area_height;
+            let slice_height = min(
+                area_y1 - slice_buffer_y0,
+                DEM_TILE_SIZE - slice_tile_y0.value,
+            );
+
+            self.load_tile_slice(&TileSlice {
+                tile_key,
+                slice_buffer_x0,
+                slice_buffer_y0,
+                slice_tile_x0,
+                slice_tile_y0,
+                slice_width,
+                slice_height,
+            });
+
+            // try to move to the next slice to the right
+            slice_buffer_x0 += slice_width;
+            slice_west_edge_global_cell =
+                &slice_west_edge_global_cell + slice_width;
+
+            if slice_buffer_x0 >= area_width {
+                // if we reached the right edge of the area...
+
+                // "carriage return" to the left edge of the area...
+                slice_buffer_x0 = area_x;
+                slice_west_edge_global_cell =
+                    area_west_edge_global_cell.clone();
+
+                // ...and move to the next slice to the bottom
+                slice_buffer_y0 += slice_height;
+                slice_north_edge_global_cell =
+                    &slice_north_edge_global_cell - slice_height;
+
+                if slice_buffer_y0 >= area_height {
+                    // if we reached the bottom edge of the buffer, we are done
+                    next_slice_available = false;
+                }
+            }
         }
     }
 
@@ -838,8 +806,6 @@ mod tests {
             })
         );
 
-        // assert_eq!(dem_buffer.slices_loaded.len(), 2);
-
         assert_eq!(
             dem_buffer.slices_loaded[0],
             TileSlice {
@@ -862,8 +828,11 @@ mod tests {
                 slice_tile_x0: LocalCell::new(expected_tile_x0),
                 slice_tile_y0: LocalCell::new(0),
                 slice_width: buffer_size - expected_block_width,
-                slice_height: expected_block_width - expected_lower_tile_row_y0,
+                slice_height: buffer_size - expected_lower_tile_row_y0,
             }
         );
+
+        // todo 10: move back to the front once the other assertions are correct
+        assert_eq!(dem_buffer.slices_loaded.len(), 2);
     }
 }
