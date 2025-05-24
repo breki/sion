@@ -68,7 +68,7 @@ pub struct DemBuffer {
 
     state: BufferState,
 
-    // data: Box<[u8]>,
+    data: Box<[i16]>,
     center_global_cell_lon: GlobalCell,
     center_global_cell_lat: GlobalCell,
 
@@ -86,13 +86,14 @@ pub struct DemBuffer {
 
 impl DemBuffer {
     pub fn new(width: i32, height: i32) -> Self {
-        // let size = (width * height) as usize;
-        // let data = vec![0; size].into_boxed_slice();
+        let size = (width * height) as usize;
+        let data = vec![0; size].into_boxed_slice();
+
         DemBuffer {
             buffer_width: width,
             buffer_height: height,
             state: BufferState::Uninitialized,
-            // data,
+            data,
             center_global_cell_lon: GlobalCell::new(0),
             center_global_cell_lat: GlobalCell::new(0),
 
@@ -165,6 +166,8 @@ impl DemBuffer {
     }
 
     fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
+        self.clear_data();
+
         self.center_global_cell_lon = GlobalCell::from_degrees(lon);
         self.center_global_cell_lat = GlobalCell::from_degrees(lat);
 
@@ -315,9 +318,42 @@ impl DemBuffer {
         dest_x0: i32,
         dest_y0: i32,
     ) {
-        // Here we would implement the logic to move the DEM block
-        // from the source coordinates to the destination coordinates.
-        // This is a placeholder implementation.
+        // The move is simulated in a such a way as to copy the block of data
+        // from the source position to the destination position, and clear
+        // all the remaining cells in the buffer. This is to ensure
+        // that the partial update of those remaining cells always sets the
+        // cells from an uninitialized state to the new values. If the update
+        // tries to overwrite the already initialized cells, it will
+        // indicate a bug in the update algorithm.
+
+        // First, we need to copy the data from the buffer to a temporary
+        // buffer
+        let mut data_copy =
+            vec![0; (self.buffer_width * self.buffer_height) as usize];
+        for y in 0..self.buffer_height {
+            for x in 0..self.buffer_width {
+                let source_cell = self.get_cell(x, y);
+                let dest_index = (y * self.buffer_width + x) as usize;
+                data_copy[dest_index] = source_cell.to_i16();
+            }
+        }
+
+        // now clean the original data
+        self.clear_data();
+
+        // ... and copy the block from the copy to the new position
+        for y in 0..block_height {
+            for x in 0..block_width {
+                let source_index =
+                    (source_y0 + y) * self.buffer_width + (source_x0 + x);
+                self.set_cell(
+                    dest_x0 + x,
+                    dest_y0 + y,
+                    &TileKey::from_i16(data_copy[source_index as usize]),
+                );
+            }
+        }
+
         self.block_move = Some(BlockMove {
             source_x0,
             source_y0,
@@ -455,12 +491,69 @@ impl DemBuffer {
     }
 
     fn load_tile_slice(&mut self, slice: &TileSlice) {
+        for x in 0..slice.slice_width {
+            for y in 0..slice.slice_height {
+                self.set_cell(
+                    x + slice.slice_buffer_x0,
+                    y + slice.slice_buffer_y0,
+                    &slice.tile_key,
+                );
+            }
+        }
+
         self.slices_loaded.push(slice.clone());
+    }
+
+    fn get_cell(&self, x: i32, y: i32) -> TileKey {
+        let index = (y * self.buffer_width + x) as usize;
+        if index < self.data.len() {
+            TileKey::from_i16(self.data[index])
+        } else {
+            panic!("Index out of bounds");
+        }
+    }
+
+    fn set_cell(&mut self, x: i32, y: i32, value: &TileKey) {
+        let index = (y * self.buffer_width + x) as usize;
+        if index < self.data.len() {
+            if self.data[index] != 0 {
+                // If the cell is already occupied, this indicates the buffer
+                // update algorithm has a bug. Only empty cells should be
+                // overwritten during the update.
+                println!(
+                    "Bug: Trying to overwrite an already occupied cell at ({}, {})",
+                    x, y
+                );
+            }
+
+            self.data[index] = value.to_i16();
+        } else {
+            panic!("Index out of bounds");
+        }
+    }
+
+    fn clear_data(&mut self) {
+        for cell in self.data.iter_mut() {
+            *cell = 0;
+        }
     }
 
     fn clear_update_log(&mut self) {
         self.slices_loaded.clear();
         self.block_move = None;
+    }
+
+    /// Checks if all cells in the buffer are set (not empty).
+    ///
+    /// If not all cells are set, it indicates that the buffer update
+    /// algorithm has a bug, as it did not cover all of the buffer.
+    pub fn all_cells_are_set(&self) -> bool {
+        for cell in self.data.iter() {
+            if *cell == 0 {
+                return false; // Found an empty cell
+            }
+        }
+        true // All cells are set
     }
 }
 
@@ -473,6 +566,8 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
 
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        assert!(dem_buffer.all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -537,8 +632,12 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert!(dem_buffer.all_cells_are_set());
+
         // Simulate an update with no movement
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+
+        assert!(dem_buffer.all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -551,8 +650,12 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(2000, 2000);
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert!(dem_buffer.all_cells_are_set());
+
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(9.0), &Deg::new(46.64649));
+
+        assert!(dem_buffer.all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -567,8 +670,12 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size);
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert!(dem_buffer.all_cells_are_set());
+
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
+
+        assert!(dem_buffer.all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -626,8 +733,12 @@ mod tests {
         let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size);
         dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
 
+        assert!(dem_buffer.all_cells_are_set());
+
         // Simulate a partial update
         dem_buffer.update_map_position(&Deg::new(7.2), &Deg::new(46.64649));
+
+        assert!(dem_buffer.all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 

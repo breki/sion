@@ -200,6 +200,21 @@ impl TileKey {
     pub fn from_lon_lat(lon: i32, lat: i32) -> TileKey {
         TileKey { lon, lat }
     }
+
+    pub fn from_i16(value: i16) -> TileKey {
+        let lon = value & 0xFF;
+        let lat = (value >> 8) & 0xFF;
+        TileKey {
+            lon: lon as i32,
+            lat: lat as i32,
+        }
+    }
+
+    pub fn to_i16(&self) -> i16 {
+        let lon = self.lon as i16;
+        let lat = self.lat as i16;
+        (lat << 8) | (lon & 0xFF)
+    }
 }
 
 impl PartialEq for TileKey {
