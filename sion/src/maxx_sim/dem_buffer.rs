@@ -1,6 +1,6 @@
 use crate::maxx_sim::types::{
-    calculate_pixel_size_in_grid_units, Deg, GlobalCell, Grid, LocalCell,
-    TileKey, DEM_TILE_SIZE, GRID_UNITS_PER_DEM_CELL_BITS, MAX_PIXELS_PER_METER,
+    Deg, GlobalCell, Grid, LocalCell, TileKey, DEM_TILE_SIZE,
+    GRID_UNITS_PER_DEM_CELL_BITS,
 };
 use std::cmp::{max, min};
 
@@ -60,11 +60,10 @@ enum BufferUpdateDecision {
     EntireBufferReloadRequired,
 }
 
-const MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH: i32 = 500;
-
 pub struct DemBuffer {
     pub buffer_width: i32,
     pub buffer_height: i32,
+    min_cell_distance_to_edge_before_refresh: i32,
 
     state: BufferState,
 
@@ -77,21 +76,23 @@ pub struct DemBuffer {
     buffer_north_edge_grid: Grid,
     buffer_south_edge_grid: Grid,
 
-    horizontal_max_pixel_size_in_grids: Grid,
-    vertical_max_pixel_size_in_grids: Grid,
-
     pub slices_loaded: Vec<TileSlice>,
     pub block_move: Option<BlockMove>,
 }
 
 impl DemBuffer {
-    pub fn new(width: i32, height: i32) -> Self {
+    pub fn new(
+        width: i32,
+        height: i32,
+        min_cell_distance_to_edge_before_refresh: i32,
+    ) -> Self {
         let size = (width * height) as usize;
         let data = vec![0; size].into_boxed_slice();
 
         DemBuffer {
             buffer_width: width,
             buffer_height: height,
+            min_cell_distance_to_edge_before_refresh,
             state: BufferState::Uninitialized,
             data,
             center_global_cell_lon: GlobalCell::new(0),
@@ -102,15 +103,18 @@ impl DemBuffer {
             buffer_north_edge_grid: Grid::new(0),
             buffer_south_edge_grid: Grid::new(0),
 
-            horizontal_max_pixel_size_in_grids: Grid::new(0),
-            vertical_max_pixel_size_in_grids: Grid::new(0),
-
             slices_loaded: Vec::new(),
             block_move: None,
         }
     }
 
-    pub fn update_map_position(&mut self, lon: &Deg, lat: &Deg) {
+    pub fn update_map_position(
+        &mut self,
+        lon: &Deg,
+        lat: &Deg,
+        visible_area_width: i32,
+        visible_area_height: i32,
+    ) {
         self.clear_update_log();
 
         let mut full_update_needed = self.state == BufferState::Uninitialized;
@@ -118,7 +122,12 @@ impl DemBuffer {
         println!("full_update_needed: {}", full_update_needed);
 
         if self.state == BufferState::Initialized {
-            let update_required = self.is_buffer_update_required(lon, lat);
+            let update_required = self.is_buffer_update_required(
+                lon,
+                lat,
+                visible_area_width,
+                visible_area_height,
+            );
 
             println!("update_required: {}", update_required);
 
@@ -137,32 +146,42 @@ impl DemBuffer {
         }
     }
 
-    fn is_buffer_update_required(&self, lon: &Deg, lat: &Deg) -> bool {
+    fn is_buffer_update_required(
+        &self,
+        lon: &Deg,
+        lat: &Deg,
+        visible_area_width: i32,
+        visible_area_height: i32,
+    ) -> bool {
         let map_center_lon_grid = Grid::from_degrees(lon);
         let map_center_lat_grid = Grid::from_degrees(lat);
 
-        // calculate the distance of the new map center from the edges
-        // of the buffer
-        let west_edge_distance_in_pixels = (&map_center_lon_grid
-            - &self.buffer_west_edge_grid)
-            / self.horizontal_max_pixel_size_in_grids.value;
-        let east_edge_distance_in_pixels = (&self.buffer_east_edge_grid
-            - &map_center_lon_grid)
-            / self.horizontal_max_pixel_size_in_grids.value;
-        let north_edge_distance_in_pixels = (&self.buffer_north_edge_grid
-            - &map_center_lat_grid)
-            / self.vertical_max_pixel_size_in_grids.value;
-        let south_edge_distance_in_pixels = (&map_center_lat_grid
-            - &self.buffer_south_edge_grid)
-            / self.vertical_max_pixel_size_in_grids.value;
+        let visible_west_edge = &map_center_lon_grid
+            - ((visible_area_width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
+        let visible_east_edge = &visible_west_edge
+            + (visible_area_width << GRID_UNITS_PER_DEM_CELL_BITS);
+        let visible_north_edge = &map_center_lat_grid
+            + ((visible_area_height / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
+        let visible_south_edge = &visible_north_edge
+            - (visible_area_height << GRID_UNITS_PER_DEM_CELL_BITS);
 
-        west_edge_distance_in_pixels < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
-            || east_edge_distance_in_pixels
-                < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
-            || north_edge_distance_in_pixels
-                < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
-            || south_edge_distance_in_pixels
-                < MIN_PIXEL_DISTANCE_TO_EDGE_BEFORE_REFRESH
+        let west_edge_distance_in_cells =
+            &visible_west_edge - &self.buffer_west_edge_grid;
+        let east_edge_distance_in_cells =
+            &self.buffer_east_edge_grid - &visible_east_edge;
+        let north_edge_distance_in_cells =
+            &visible_north_edge - &self.buffer_north_edge_grid;
+        let south_edge_distance_in_cells =
+            &self.buffer_south_edge_grid - &visible_south_edge;
+
+        west_edge_distance_in_cells
+            < self.min_cell_distance_to_edge_before_refresh
+            || east_edge_distance_in_cells
+                < self.min_cell_distance_to_edge_before_refresh
+            || north_edge_distance_in_cells
+                < self.min_cell_distance_to_edge_before_refresh
+            || south_edge_distance_in_cells
+                < self.min_cell_distance_to_edge_before_refresh
     }
 
     fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
@@ -179,16 +198,6 @@ impl DemBuffer {
             + ((self.buffer_height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
         self.buffer_south_edge_grid = &self.buffer_north_edge_grid
             - (self.buffer_height << GRID_UNITS_PER_DEM_CELL_BITS);
-
-        // Calculate the maximum pixel size so we can use it when map position
-        // is moved to determine whether the DEM buffer needs to be updated.
-        let (hpixel_size, vpixel_size) = calculate_pixel_size_in_grid_units(
-            lat.to_radians(),
-            MAX_PIXELS_PER_METER,
-        );
-
-        self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
-        self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
 
         self.update_buffer_area(0, 0, self.buffer_width, self.buffer_height);
 
@@ -283,14 +292,6 @@ impl DemBuffer {
             // update the buffer's fields
             self.center_global_cell_lon = GlobalCell::from_degrees(lon);
             self.center_global_cell_lat = GlobalCell::from_degrees(lat);
-
-            let (hpixel_size, vpixel_size) = calculate_pixel_size_in_grid_units(
-                lat.to_radians(),
-                MAX_PIXELS_PER_METER,
-            );
-
-            self.horizontal_max_pixel_size_in_grids = Grid::new(hpixel_size);
-            self.vertical_max_pixel_size_in_grids = Grid::new(vpixel_size);
 
             self.buffer_north_edge_grid = new_buffer_north_edge_grid;
             self.buffer_south_edge_grid = new_buffer_south_edge_grid;
@@ -563,9 +564,14 @@ mod tests {
 
     #[test]
     fn test_initial_loading() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000);
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
 
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
@@ -629,13 +635,23 @@ mod tests {
 
     #[test]
     fn test_no_update_is_required_if_no_movement() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000);
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
         // Simulate an update with no movement
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
@@ -647,13 +663,23 @@ mod tests {
 
     #[test]
     fn test_moved_too_far_so_full_reload_is_needed() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000);
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
         // Simulate a partial update
-        dem_buffer.update_map_position(&Deg::new(9.0), &Deg::new(46.64649));
+        dem_buffer.update_map_position(
+            &Deg::new(9.0),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
@@ -667,13 +693,23 @@ mod tests {
     fn test_partial_update_is_required_to_the_right() {
         let buffer_size = 2000;
 
-        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size);
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 100);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
         // Simulate a partial update
-        dem_buffer.update_map_position(&Deg::new(8.0), &Deg::new(46.64649));
+        dem_buffer.update_map_position(
+            &Deg::new(8.0),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
@@ -730,13 +766,23 @@ mod tests {
     fn test_partial_update_is_required_to_the_left() {
         let buffer_size = 2000;
 
-        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size);
-        dem_buffer.update_map_position(&Deg::new(7.65532), &Deg::new(46.64649));
+        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 100);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 
         // Simulate a partial update
-        dem_buffer.update_map_position(&Deg::new(7.2), &Deg::new(46.64649));
+        dem_buffer.update_map_position(
+            &Deg::new(7.2),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
 
         assert!(dem_buffer.all_cells_are_set());
 

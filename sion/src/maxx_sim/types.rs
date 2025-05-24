@@ -8,8 +8,6 @@ pub const DEM_TILE_SIZE: i32 = 1800;
 pub const DEM_TILE_SIZE_IN_GRID_CELLS: i32 =
     DEM_TILE_SIZE * GRID_UNITS_PER_DEM_CELL;
 
-pub const MAX_PIXELS_PER_METER: f32 = 45.0;
-
 #[derive(Clone)]
 pub struct Deg {
     pub value: f32,
@@ -243,4 +241,17 @@ pub fn calculate_pixel_size_in_grid_units(
     let vertical = (horizontal as f32 * latitude_cos).round() as i32;
 
     (horizontal, vertical)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pixel_size() {
+        let (horizontal, vertical) =
+            calculate_pixel_size_in_grid_units(0.0, 1.0);
+        assert_eq!(horizontal, 4);
+        assert_eq!(vertical, 4);
+    }
 }
