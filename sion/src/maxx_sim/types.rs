@@ -56,7 +56,7 @@ impl GlobalCell {
 
 use std::cmp::Ordering;
 use std::f32::consts::PI;
-use std::ops::{Add, Sub};
+use std::ops::{Add, Sub, SubAssign};
 
 impl PartialEq for GlobalCell {
     fn eq(&self, other: &Self) -> bool {
@@ -121,6 +121,12 @@ impl Sub<i32> for &GlobalCell {
         GlobalCell {
             value: self.value - other,
         }
+    }
+}
+
+impl SubAssign<i32> for GlobalCell {
+    fn sub_assign(&mut self, other: i32) {
+        self.value -= other;
     }
 }
 

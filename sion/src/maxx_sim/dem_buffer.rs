@@ -1,6 +1,5 @@
 use crate::maxx_sim::types::{
-    Deg, GlobalCell, Grid, LocalCell, TileKey, DEM_TILE_SIZE,
-    GRID_UNITS_PER_DEM_CELL_BITS,
+    Deg, GlobalCell, LocalCell, TileKey, DEM_TILE_SIZE,
 };
 use std::cmp::{max, min};
 
@@ -71,10 +70,10 @@ pub struct DemBuffer {
     center_global_cell_lon: GlobalCell,
     center_global_cell_lat: GlobalCell,
 
-    buffer_west_edge_grid: Grid,
-    buffer_east_edge_grid: Grid,
-    buffer_north_edge_grid: Grid,
-    buffer_south_edge_grid: Grid,
+    buffer_west_edge: GlobalCell,
+    buffer_east_edge: GlobalCell,
+    buffer_north_edge: GlobalCell,
+    buffer_south_edge: GlobalCell,
 
     pub slices_loaded: Vec<TileSlice>,
     pub block_move: Option<BlockMove>,
@@ -98,10 +97,10 @@ impl DemBuffer {
             center_global_cell_lon: GlobalCell::new(0),
             center_global_cell_lat: GlobalCell::new(0),
 
-            buffer_west_edge_grid: Grid::new(0),
-            buffer_east_edge_grid: Grid::new(0),
-            buffer_north_edge_grid: Grid::new(0),
-            buffer_south_edge_grid: Grid::new(0),
+            buffer_west_edge: GlobalCell::new(0),
+            buffer_east_edge: GlobalCell::new(0),
+            buffer_north_edge: GlobalCell::new(0),
+            buffer_south_edge: GlobalCell::new(0),
 
             slices_loaded: Vec::new(),
             block_move: None,
@@ -153,26 +152,23 @@ impl DemBuffer {
         visible_area_width: i32,
         visible_area_height: i32,
     ) -> bool {
-        let map_center_lon_grid = Grid::from_degrees(lon);
-        let map_center_lat_grid = Grid::from_degrees(lat);
+        let map_center_lon_cell = GlobalCell::from_degrees(lon);
+        let map_center_lat_cell = GlobalCell::from_degrees(lat);
 
-        let visible_west_edge = &map_center_lon_grid
-            - ((visible_area_width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
-        let visible_east_edge = &visible_west_edge
-            + (visible_area_width << GRID_UNITS_PER_DEM_CELL_BITS);
-        let visible_north_edge = &map_center_lat_grid
-            + ((visible_area_height / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
-        let visible_south_edge = &visible_north_edge
-            - (visible_area_height << GRID_UNITS_PER_DEM_CELL_BITS);
+        let visible_west_edge = &map_center_lon_cell - (visible_area_width / 2);
+        let visible_east_edge = &visible_west_edge + visible_area_width;
+        let visible_north_edge =
+            &map_center_lat_cell + (visible_area_height / 2);
+        let visible_south_edge = &visible_north_edge - visible_area_height;
 
         let west_edge_distance_in_cells =
-            &visible_west_edge - &self.buffer_west_edge_grid;
+            &visible_west_edge - &self.buffer_west_edge;
         let east_edge_distance_in_cells =
-            &self.buffer_east_edge_grid - &visible_east_edge;
+            &self.buffer_east_edge - &visible_east_edge;
         let north_edge_distance_in_cells =
-            &visible_north_edge - &self.buffer_north_edge_grid;
+            &visible_north_edge - &self.buffer_north_edge;
         let south_edge_distance_in_cells =
-            &self.buffer_south_edge_grid - &visible_south_edge;
+            &self.buffer_south_edge - &visible_south_edge;
 
         west_edge_distance_in_cells
             < self.min_cell_distance_to_edge_before_refresh
@@ -190,14 +186,12 @@ impl DemBuffer {
         self.center_global_cell_lon = GlobalCell::from_degrees(lon);
         self.center_global_cell_lat = GlobalCell::from_degrees(lat);
 
-        self.buffer_west_edge_grid = &Grid::from_degrees(lon)
-            - ((self.buffer_width / 2) << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_east_edge_grid = &self.buffer_west_edge_grid
-            + (self.buffer_width << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_north_edge_grid = &Grid::from_degrees(lat)
-            + ((self.buffer_height) / 2 << GRID_UNITS_PER_DEM_CELL_BITS);
-        self.buffer_south_edge_grid = &self.buffer_north_edge_grid
-            - (self.buffer_height << GRID_UNITS_PER_DEM_CELL_BITS);
+        self.buffer_west_edge =
+            &GlobalCell::from_degrees(lon) - self.buffer_width / 2;
+        self.buffer_east_edge = &self.buffer_west_edge + self.buffer_width;
+        self.buffer_north_edge =
+            &GlobalCell::from_degrees(lat) + (self.buffer_height) / 2;
+        self.buffer_south_edge = &self.buffer_north_edge - self.buffer_height;
 
         self.update_buffer_area(0, 0, self.buffer_width, self.buffer_height);
 
@@ -209,54 +203,41 @@ impl DemBuffer {
         lon: &Deg,
         lat: &Deg,
     ) -> BufferUpdateDecision {
-        let new_buffer_west_edge_grid =
-            &Grid::from_degrees(lon) - ((self.buffer_width / 2) << 8);
-        let new_buffer_east_edge_grid =
-            &new_buffer_west_edge_grid + (self.buffer_width << 8);
-        let new_buffer_north_edge_grid =
-            &Grid::from_degrees(lat) + ((self.buffer_height / 2) << 8);
-        let new_buffer_south_edge_grid =
-            &new_buffer_north_edge_grid - (self.buffer_height << 8);
-
-        // Get the coordinates of the edges of the buffer once the buffer
-        // has been moved to the new position.
         let new_buffer_west_edge_global_cell =
-            new_buffer_west_edge_grid.to_global_cell();
+            &GlobalCell::from_degrees(lon) - self.buffer_width / 2;
         let new_buffer_east_edge_global_cell =
-            new_buffer_east_edge_grid.to_global_cell();
+            &new_buffer_west_edge_global_cell + self.buffer_width;
         let new_buffer_north_edge_global_cell =
-            new_buffer_north_edge_grid.to_global_cell();
+            &GlobalCell::from_degrees(lat) + self.buffer_height / 2;
         let new_buffer_south_edge_global_cell =
-            new_buffer_south_edge_grid.to_global_cell();
+            &new_buffer_north_edge_global_cell - self.buffer_height;
 
         // Calculate the intersection area between the DEM buffer in its
         // current position and the new position.
         let intersection_west_edge = GlobalCell::new(max(
-            self.buffer_west_edge_grid.to_global_cell().value,
+            self.buffer_west_edge.value,
             new_buffer_west_edge_global_cell.value,
         ));
 
         let intersection_east_edge = GlobalCell::new(min(
-            self.buffer_east_edge_grid.to_global_cell().value,
+            self.buffer_east_edge.value,
             new_buffer_east_edge_global_cell.value,
         ));
 
         let intersection_north_edge = GlobalCell::new(min(
-            self.buffer_north_edge_grid.to_global_cell().value,
+            self.buffer_north_edge.value,
             new_buffer_north_edge_global_cell.value,
         ));
 
         let intersection_south_edge = GlobalCell::new(max(
-            self.buffer_south_edge_grid.to_global_cell().value,
+            self.buffer_south_edge.value,
             new_buffer_south_edge_global_cell.value,
         ));
 
         // Now calculate the top-left corner of the intersection in the
         // buffer's local coordinates.
-        let source_x0 = &intersection_west_edge
-            - &self.buffer_west_edge_grid.to_global_cell();
-        let source_y0 = &self.buffer_north_edge_grid.to_global_cell()
-            - &intersection_north_edge;
+        let source_x0 = &intersection_west_edge - &self.buffer_west_edge;
+        let source_y0 = &self.buffer_north_edge - &intersection_north_edge;
 
         // Also calculate the width and height of the intersection.
         let block_width = &intersection_east_edge - &intersection_west_edge;
@@ -293,10 +274,10 @@ impl DemBuffer {
             self.center_global_cell_lon = GlobalCell::from_degrees(lon);
             self.center_global_cell_lat = GlobalCell::from_degrees(lat);
 
-            self.buffer_north_edge_grid = new_buffer_north_edge_grid;
-            self.buffer_south_edge_grid = new_buffer_south_edge_grid;
-            self.buffer_west_edge_grid = new_buffer_west_edge_grid;
-            self.buffer_east_edge_grid = new_buffer_east_edge_grid;
+            self.buffer_north_edge = new_buffer_north_edge_global_cell;
+            self.buffer_south_edge = new_buffer_south_edge_global_cell;
+            self.buffer_west_edge = new_buffer_west_edge_global_cell;
+            self.buffer_east_edge = new_buffer_east_edge_global_cell;
 
             // now load slices from DEM files
             self.fill_missing_data_after_move();
@@ -411,14 +392,12 @@ impl DemBuffer {
         area_height: i32,
     ) {
         // the global cell coordinates of the left (west) edge of the buffer
-        let area_west_edge_global_cell =
-            &self.buffer_west_edge_grid.to_global_cell() + area_x;
+        let area_west_edge_global_cell = &self.buffer_west_edge + area_x;
 
         // the top-left corner of the tile slice in the buffer coordinates
         let mut slice_west_edge_global_cell =
             area_west_edge_global_cell.clone();
-        let mut slice_north_edge_global_cell =
-            self.buffer_north_edge_grid.to_global_cell();
+        let mut slice_north_edge_global_cell = self.buffer_north_edge.clone();
 
         // the buffer coordinates of the top-left corner of the tile slice
         let mut slice_buffer_x0 = area_x;
@@ -480,8 +459,7 @@ impl DemBuffer {
 
                 // ...and move to the next slice to the bottom
                 slice_buffer_y0 += slice_height;
-                slice_north_edge_global_cell =
-                    &slice_north_edge_global_cell - slice_height;
+                slice_north_edge_global_cell -= slice_height;
 
                 if slice_buffer_y0 >= area_height {
                     // if we reached the bottom edge of the buffer, we are done
