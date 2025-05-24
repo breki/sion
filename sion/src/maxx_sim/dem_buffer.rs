@@ -522,7 +522,7 @@ impl DemBuffer {
             self.buffer_west_edge_grid = new_buffer_west_edge_grid;
             self.buffer_east_edge_grid = new_buffer_east_edge_grid;
 
-            // todo 0: now load slices from DEM files
+            // now load slices from DEM files
             self.fill_missing_data_after_move();
         } else {
             println!("No intersection found!");
@@ -557,13 +557,15 @@ impl DemBuffer {
     }
 
     fn fill_missing_data_after_move(&mut self) {
-        // todo 0: determine the missing area and call update_buffer_area
         match self.block_move {
             Some(ref block_move) => {
+                // todo 6: now cover all the possible cases of missing areas
+
                 // Calculate the missing area based on the block move
                 let missing_area_x = block_move.block_width;
                 let missing_area_y = 0;
-                let missing_area_width = self.buffer_width - block_move.block_width;
+                let missing_area_width =
+                    self.buffer_width - block_move.block_width;
                 let missing_area_height = self.buffer_height;
 
                 // Update the buffer area with the missing area
@@ -578,8 +580,6 @@ impl DemBuffer {
                 panic!("No block move found, this method should not be called in this case.");
             }
         }
-
-        // todo 6: now cover all the possible cases of missing areas
     }
 
     fn update_buffer_area(
@@ -806,6 +806,8 @@ mod tests {
             })
         );
 
+        assert_eq!(dem_buffer.slices_loaded.len(), 2);
+
         assert_eq!(
             dem_buffer.slices_loaded[0],
             TileSlice {
@@ -831,8 +833,5 @@ mod tests {
                 slice_height: buffer_size - expected_lower_tile_row_y0,
             }
         );
-
-        // todo 10: move back to the front once the other assertions are correct
-        assert_eq!(dem_buffer.slices_loaded.len(), 2);
     }
 }
