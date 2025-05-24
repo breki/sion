@@ -1,6 +1,35 @@
 use crate::maxx_sim::types::{Deg, GlobalCell, LocalCell, TileKey};
 use std::cmp::{max, min};
 
+pub struct CellKey {
+    value: i32,
+}
+
+impl CellKey {
+    pub fn from_cell_coords(x: GlobalCell, y: GlobalCell) -> Self {
+        let cell_x = x.value;
+        let cell_y = y.value;
+        let value = cell_y * 100000 + cell_x;
+        CellKey {
+            value, // Assuming a unique encoding for the cell
+        }
+    }
+
+    pub fn from_i32(value: i32) -> Self {
+        CellKey { value }
+    }
+
+    pub fn to_cell_coords(&self) -> (GlobalCell, GlobalCell) {
+        let cell_x = self.value % 100000;
+        let cell_y = self.value / 100000;
+        (GlobalCell::new(cell_x), GlobalCell::new(cell_y))
+    }
+
+    pub fn to_i32(&self) -> i32 {
+        self.value
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TileSlice {
     pub tile_key: TileKey,
@@ -65,7 +94,8 @@ pub struct DemBuffer {
 
     state: BufferState,
 
-    data: Box<[i16]>,
+    // todo 0: the buffer data should be the global cell coordinates
+    data: Box<[i32]>,
     center_global_cell_lon: GlobalCell,
     center_global_cell_lat: GlobalCell,
 
@@ -319,13 +349,13 @@ impl DemBuffer {
 
         // First, we need to copy the data from the buffer to a temporary
         // buffer
-        let mut data_copy =
+        let mut data_copy: Vec<i32> =
             vec![0; (self.buffer_width * self.buffer_height) as usize];
         for y in 0..self.buffer_height {
             for x in 0..self.buffer_width {
                 let source_cell = self.get_cell(x, y);
                 let dest_index = (y * self.buffer_width + x) as usize;
-                data_copy[dest_index] = source_cell.to_i16();
+                data_copy[dest_index] = source_cell.to_i32();
             }
         }
 
@@ -340,7 +370,7 @@ impl DemBuffer {
                 self.set_cell(
                     dest_x0 + x,
                     dest_y0 + y,
-                    &TileKey::from_i16(data_copy[source_index as usize]),
+                    &CellKey::from_i32(data_copy[source_index as usize]),
                 );
             }
         }
@@ -482,12 +512,31 @@ impl DemBuffer {
     }
 
     fn load_tile_slice(&mut self, slice: &TileSlice) {
-        for x in 0..slice.slice_width {
-            for y in 0..slice.slice_height {
+        let lon_global_cell = GlobalCell::from_degrees(
+            &Deg::new(slice.tile_key.lon as f32),
+            self.dem_tile_size,
+        );
+        let lat_global_cell = GlobalCell::from_degrees(
+            &Deg::new(slice.tile_key.lat as f32),
+            self.dem_tile_size,
+        );
+
+        for y in 0..slice.slice_height {
+            for x in 0..slice.slice_width {
+                let dem_lon_global_cell =
+                    &lon_global_cell + (slice.slice_tile_x0.value + x);
+                let dem_lat_global_cell = &lat_global_cell
+                    + (self.dem_tile_size
+                        - 1
+                        - (slice.slice_tile_y0.value + y));
+
                 self.set_cell(
-                    x + slice.slice_buffer_x0,
-                    y + slice.slice_buffer_y0,
-                    &slice.tile_key,
+                    slice.slice_buffer_x0 + x,
+                    slice.slice_buffer_y0 + y,
+                    &CellKey::from_cell_coords(
+                        dem_lon_global_cell,
+                        dem_lat_global_cell,
+                    ),
                 );
             }
         }
@@ -495,16 +544,16 @@ impl DemBuffer {
         self.slices_loaded.push(slice.clone());
     }
 
-    fn get_cell(&self, x: i32, y: i32) -> TileKey {
+    fn get_cell(&self, x: i32, y: i32) -> CellKey {
         let index = (y * self.buffer_width + x) as usize;
         if index < self.data.len() {
-            TileKey::from_i16(self.data[index])
+            CellKey::from_i32(self.data[index])
         } else {
             panic!("Index out of bounds");
         }
     }
 
-    fn set_cell(&mut self, x: i32, y: i32, value: &TileKey) {
+    fn set_cell(&mut self, x: i32, y: i32, value: &CellKey) {
         let index = (y * self.buffer_width + x) as usize;
         if index < self.data.len() {
             if self.data[index] != 0 {
@@ -517,7 +566,7 @@ impl DemBuffer {
                 );
             }
 
-            self.data[index] = value.to_i16();
+            self.data[index] = value.to_i32();
         } else {
             panic!("Index out of bounds");
         }
@@ -538,13 +587,62 @@ impl DemBuffer {
     ///
     /// If not all cells are set, it indicates that the buffer update
     /// algorithm has a bug, as it did not cover all the buffer.
-    pub fn all_cells_are_set(&self) -> bool {
+    pub fn prop_all_cells_are_set(&self) -> bool {
         for cell in self.data.iter() {
             if *cell == 0 {
                 return false; // Found an empty cell
             }
         }
         true // All cells are set
+    }
+
+    pub fn prop_all_cells_are_good_neighbors(&self) -> bool {
+        for y in 0..self.buffer_height - 1 {
+            for x in 0..self.buffer_width - 1 {
+                let cell = self.get_cell(x, y);
+                let (cell_x, cell_y) = cell.to_cell_coords();
+
+                let east_neighbor = self.get_cell(x + 1, y);
+                let (east_neighbor_x, east_neighbor_y) =
+                    east_neighbor.to_cell_coords();
+
+                if east_neighbor_x.value != cell_x.value + 1
+                    || east_neighbor_y.value != cell_y.value
+                {
+                    println!(
+                        "{}, {}: ({}, {}) >> ({}, {})",
+                        x,
+                        y,
+                        cell_x.value,
+                        cell_y.value,
+                        east_neighbor_x.value,
+                        east_neighbor_y.value
+                    );
+                    return false; // East neighbor is not a good neighbor
+                }
+
+                let south_neighbor = self.get_cell(x, y + 1);
+                let (south_neighbor_x, south_neighbor_y) =
+                    south_neighbor.to_cell_coords();
+
+                if south_neighbor_x.value != cell_x.value
+                    || south_neighbor_y.value != cell_y.value - 1
+                {
+                    println!(
+                        "{}, {}: ({}, {}) VV ({}, {})",
+                        x,
+                        y,
+                        cell_x.value,
+                        cell_y.value,
+                        south_neighbor_x.value,
+                        south_neighbor_y.value
+                    );
+                    return false; // South neighbor is not a good neighbor
+                }
+            }
+        }
+
+        true // All cells have good neighbors
     }
 }
 
@@ -563,7 +661,8 @@ mod tests {
             100,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -585,7 +684,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate an update with no movement
         dem_buffer.update_map_position(
@@ -595,7 +695,7 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -616,7 +716,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
         dem_buffer.update_map_position(
@@ -626,7 +727,7 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -648,7 +749,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
         dem_buffer.update_map_position(
@@ -658,7 +760,7 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
         assert_ne!(dem_buffer.block_move, None);
@@ -679,7 +781,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
         dem_buffer.update_map_position(
@@ -689,7 +792,7 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_set());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
         assert_ne!(dem_buffer.block_move, None);
@@ -697,279 +800,15 @@ mod tests {
     }
 
     #[test]
-    fn test_initial_loading() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
-
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
+    fn test_cell_keys() {
+        let cell_key = CellKey::from_cell_coords(
+            GlobalCell::new(100),
+            GlobalCell::new(200),
         );
 
-        assert!(dem_buffer.all_cells_are_set());
+        let (tile_lon_cell, tile_lat_cell) = cell_key.to_cell_coords();
 
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        assert_eq!(dem_buffer.block_move, None);
-        assert_eq!(dem_buffer.slices_loaded.len(), 4);
-
-        assert_eq!(
-            dem_buffer.slices_loaded[0],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(7, 47),
-                slice_buffer_x0: 0,
-                slice_buffer_y0: 0,
-                slice_tile_x0: LocalCell::new(179),
-                slice_tile_y0: LocalCell::new(1436),
-                slice_width: 1621,
-                slice_height: 364,
-            }
-        );
-
-        assert_eq!(
-            dem_buffer.slices_loaded[1],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(8, 47),
-                slice_buffer_x0: 1621,
-                slice_buffer_y0: 0,
-                slice_tile_x0: LocalCell::new(0),
-                slice_tile_y0: LocalCell::new(1436),
-                slice_width: 379,
-                slice_height: 364,
-            }
-        );
-
-        assert_eq!(
-            dem_buffer.slices_loaded[2],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(7, 46),
-                slice_buffer_x0: 0,
-                slice_buffer_y0: 364,
-                slice_tile_x0: LocalCell::new(179),
-                slice_tile_y0: LocalCell::new(0),
-                slice_width: 1621,
-                slice_height: 1636,
-            }
-        );
-
-        assert_eq!(
-            dem_buffer.slices_loaded[3],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(8, 46),
-                slice_buffer_x0: 1621,
-                slice_buffer_y0: 364,
-                slice_tile_x0: LocalCell::new(0),
-                slice_tile_y0: LocalCell::new(0),
-                slice_width: 379,
-                slice_height: 1636,
-            }
-        );
+        assert_eq!(tile_lon_cell.value, 100);
+        assert_eq!(tile_lat_cell.value, 200);
     }
-
-    #[test]
-    fn test_no_update_is_required_if_no_movement() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        // Simulate an update with no movement
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        assert_eq!(dem_buffer.block_move, None);
-        assert_eq!(dem_buffer.slices_loaded.len(), 0);
-    }
-
-    #[test]
-    fn test_moved_too_far_so_full_reload_is_needed() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        // Simulate a partial update
-        dem_buffer.update_map_position(
-            &Deg::new(9.0),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        assert_eq!(dem_buffer.block_move, None);
-        assert_eq!(dem_buffer.slices_loaded.len(), 4);
-    }
-
-    #[test]
-    fn test_partial_update_is_required_to_the_right() {
-        let buffer_size = 2000;
-
-        let mut dem_buffer =
-            DemBuffer::new(buffer_size, buffer_size, 1800, 100);
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        // Simulate a partial update
-        dem_buffer.update_map_position(
-            &Deg::new(8.0),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        let expected_block_width = 1379;
-        let expected_lower_tile_row_y0 = 364;
-        let expected_tile_x0_before_move = 1000;
-        let expected_tile_x0 =
-            expected_block_width - expected_tile_x0_before_move;
-
-        assert_eq!(
-            dem_buffer.block_move,
-            Some(BlockMove {
-                source_x0: 621,
-                source_y0: 0,
-                block_width: expected_block_width,
-                block_height: buffer_size,
-                dest_x0: 0,
-                dest_y0: 0
-            })
-        );
-
-        assert_eq!(dem_buffer.slices_loaded.len(), 2);
-
-        assert_eq!(
-            dem_buffer.slices_loaded[0],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(8, 47),
-                slice_buffer_x0: expected_block_width,
-                slice_buffer_y0: 0,
-                slice_tile_x0: LocalCell::new(expected_tile_x0),
-                slice_tile_y0: LocalCell::new(1436),
-                slice_width: buffer_size - expected_block_width,
-                slice_height: expected_lower_tile_row_y0,
-            }
-        );
-
-        assert_eq!(
-            dem_buffer.slices_loaded[1],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(8, 46),
-                slice_buffer_x0: expected_block_width,
-                slice_buffer_y0: expected_lower_tile_row_y0,
-                slice_tile_x0: LocalCell::new(expected_tile_x0),
-                slice_tile_y0: LocalCell::new(0),
-                slice_width: buffer_size - expected_block_width,
-                slice_height: buffer_size - expected_lower_tile_row_y0,
-            }
-        );
-    }
-
-    #[test]
-    fn test_partial_update_is_required_to_the_left() {
-        let buffer_size = 2000;
-
-        let mut dem_buffer =
-            DemBuffer::new(buffer_size, buffer_size, 1800, 100);
-        dem_buffer.update_map_position(
-            &Deg::new(7.65532),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        // Simulate a partial update
-        dem_buffer.update_map_position(
-            &Deg::new(7.2),
-            &Deg::new(46.64649),
-            200,
-            100,
-        );
-
-        assert!(dem_buffer.all_cells_are_set());
-
-        assert_eq!(dem_buffer.state, BufferState::Initialized);
-
-        let expected_block_width = 1181;
-        let expected_lower_tile_row_y0 = 364;
-        let expected_tile_x0_before_move = 1000;
-        let expected_tile_x0 =
-            expected_block_width - expected_tile_x0_before_move;
-
-        assert_eq!(
-            dem_buffer.block_move,
-            Some(BlockMove {
-                source_x0: 0,
-                source_y0: 0,
-                block_width: expected_block_width,
-                block_height: buffer_size,
-                dest_x0: 819,
-                dest_y0: 0
-            })
-        );
-
-        assert_eq!(dem_buffer.slices_loaded.len(), 4);
-
-        assert_eq!(
-            dem_buffer.slices_loaded[0],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(7, 47),
-                slice_buffer_x0: 0,
-                slice_buffer_y0: 0,
-                slice_tile_x0: LocalCell::new(expected_tile_x0),
-                slice_tile_y0: LocalCell::new(1436),
-                slice_width: buffer_size - expected_block_width,
-                slice_height: expected_lower_tile_row_y0,
-            }
-        );
-
-        assert_eq!(
-            dem_buffer.slices_loaded[1],
-            TileSlice {
-                tile_key: TileKey::from_lon_lat(7, 46),
-                slice_buffer_x0: 0,
-                slice_buffer_y0: expected_lower_tile_row_y0,
-                slice_tile_x0: LocalCell::new(expected_tile_x0),
-                slice_tile_y0: LocalCell::new(0),
-                slice_width: buffer_size - expected_block_width,
-                slice_height: buffer_size - expected_lower_tile_row_y0,
-            }
-        );
-    }
-
-    // todo 0: start implementing properties for property-based tests
 }
