@@ -1,6 +1,4 @@
-use crate::maxx_sim::types::{
-    Deg, GlobalCell, LocalCell, TileKey, DEM_TILE_SIZE,
-};
+use crate::maxx_sim::types::{Deg, GlobalCell, LocalCell, TileKey};
 use std::cmp::{max, min};
 
 #[derive(Clone, Debug)]
@@ -62,6 +60,7 @@ enum BufferUpdateDecision {
 pub struct DemBuffer {
     pub buffer_width: i32,
     pub buffer_height: i32,
+    pub dem_tile_size: i32,
     min_cell_distance_to_edge_before_refresh: i32,
 
     state: BufferState,
@@ -83,6 +82,7 @@ impl DemBuffer {
     pub fn new(
         width: i32,
         height: i32,
+        dem_tile_size: i32,
         min_cell_distance_to_edge_before_refresh: i32,
     ) -> Self {
         let size = (width * height) as usize;
@@ -91,6 +91,7 @@ impl DemBuffer {
         DemBuffer {
             buffer_width: width,
             buffer_height: height,
+            dem_tile_size,
             min_cell_distance_to_edge_before_refresh,
             state: BufferState::Uninitialized,
             data,
@@ -152,8 +153,10 @@ impl DemBuffer {
         visible_area_width: i32,
         visible_area_height: i32,
     ) -> bool {
-        let map_center_lon_cell = GlobalCell::from_degrees(lon);
-        let map_center_lat_cell = GlobalCell::from_degrees(lat);
+        let map_center_lon_cell =
+            GlobalCell::from_degrees(lon, self.dem_tile_size);
+        let map_center_lat_cell =
+            GlobalCell::from_degrees(lat, self.dem_tile_size);
 
         let visible_west_edge = &map_center_lon_cell - (visible_area_width / 2);
         let visible_east_edge = &visible_west_edge + visible_area_width;
@@ -183,14 +186,16 @@ impl DemBuffer {
     fn reload_entire_buffer(&mut self, lon: &Deg, lat: &Deg) {
         self.clear_data();
 
-        self.center_global_cell_lon = GlobalCell::from_degrees(lon);
-        self.center_global_cell_lat = GlobalCell::from_degrees(lat);
+        self.center_global_cell_lon =
+            GlobalCell::from_degrees(lon, self.dem_tile_size);
+        self.center_global_cell_lat =
+            GlobalCell::from_degrees(lat, self.dem_tile_size);
 
         self.buffer_west_edge =
-            &GlobalCell::from_degrees(lon) - self.buffer_width / 2;
+            &self.center_global_cell_lon - self.buffer_width / 2;
         self.buffer_east_edge = &self.buffer_west_edge + self.buffer_width;
         self.buffer_north_edge =
-            &GlobalCell::from_degrees(lat) + (self.buffer_height) / 2;
+            &self.center_global_cell_lat + (self.buffer_height) / 2;
         self.buffer_south_edge = &self.buffer_north_edge - self.buffer_height;
 
         self.update_buffer_area(0, 0, self.buffer_width, self.buffer_height);
@@ -204,11 +209,13 @@ impl DemBuffer {
         lat: &Deg,
     ) -> BufferUpdateDecision {
         let new_buffer_west_edge_global_cell =
-            &GlobalCell::from_degrees(lon) - self.buffer_width / 2;
+            &GlobalCell::from_degrees(lon, self.dem_tile_size)
+                - self.buffer_width / 2;
         let new_buffer_east_edge_global_cell =
             &new_buffer_west_edge_global_cell + self.buffer_width;
         let new_buffer_north_edge_global_cell =
-            &GlobalCell::from_degrees(lat) + self.buffer_height / 2;
+            &GlobalCell::from_degrees(lat, self.dem_tile_size)
+                + self.buffer_height / 2;
         let new_buffer_south_edge_global_cell =
             &new_buffer_north_edge_global_cell - self.buffer_height;
 
@@ -271,8 +278,10 @@ impl DemBuffer {
             );
 
             // update the buffer's fields
-            self.center_global_cell_lon = GlobalCell::from_degrees(lon);
-            self.center_global_cell_lat = GlobalCell::from_degrees(lat);
+            self.center_global_cell_lon =
+                GlobalCell::from_degrees(lon, self.dem_tile_size);
+            self.center_global_cell_lat =
+                GlobalCell::from_degrees(lat, self.dem_tile_size);
 
             self.buffer_north_edge = new_buffer_north_edge_global_cell;
             self.buffer_south_edge = new_buffer_south_edge_global_cell;
@@ -407,31 +416,34 @@ impl DemBuffer {
 
         while next_slice_available {
             // calculate the tile ID of the current slice
-            let tile_lon_deg =
-                slice_west_edge_global_cell.to_tile_degrees().to_int();
-            let tile_lat_deg =
-                slice_north_edge_global_cell.to_tile_degrees().to_int();
+            let tile_lon_deg = slice_west_edge_global_cell
+                .to_tile_degrees(self.dem_tile_size)
+                .to_int();
+            let tile_lat_deg = slice_north_edge_global_cell
+                .to_tile_degrees(self.dem_tile_size)
+                .to_int();
 
             // now we know which tile it is
             let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
 
             // calculate the local cell coordinates of the current slice's
             // top-left corner
-            let slice_tile_x0 = slice_west_edge_global_cell.to_local_cell_lon();
-            let slice_tile_y0 =
-                slice_north_edge_global_cell.to_local_cell_lat();
+            let slice_tile_x0 = slice_west_edge_global_cell
+                .to_local_cell_lon(self.dem_tile_size);
+            let slice_tile_y0 = slice_north_edge_global_cell
+                .to_local_cell_lat(self.dem_tile_size);
 
             // calculate the size of the tile slice to be loaded
             let area_x1 = area_x + area_width;
             let slice_width = min(
                 area_x1 - slice_buffer_x0,
-                DEM_TILE_SIZE - slice_tile_x0.value,
+                self.dem_tile_size - slice_tile_x0.value,
             );
 
             let area_y1 = area_y + area_height;
             let slice_height = min(
                 area_y1 - slice_buffer_y0,
-                DEM_TILE_SIZE - slice_tile_y0.value,
+                self.dem_tile_size - slice_tile_y0.value,
             );
 
             self.load_tile_slice(&TileSlice {
@@ -525,7 +537,7 @@ impl DemBuffer {
     /// Checks if all cells in the buffer are set (not empty).
     ///
     /// If not all cells are set, it indicates that the buffer update
-    /// algorithm has a bug, as it did not cover all of the buffer.
+    /// algorithm has a bug, as it did not cover all the buffer.
     pub fn all_cells_are_set(&self) -> bool {
         for cell in self.data.iter() {
             if *cell == 0 {
@@ -542,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_initial_loading() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
 
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
@@ -613,7 +625,7 @@ mod tests {
 
     #[test]
     fn test_no_update_is_required_if_no_movement() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
             &Deg::new(46.64649),
@@ -641,7 +653,7 @@ mod tests {
 
     #[test]
     fn test_moved_too_far_so_full_reload_is_needed() {
-        let mut dem_buffer = DemBuffer::new(2000, 2000, 100);
+        let mut dem_buffer = DemBuffer::new(2000, 2000, 1800, 100);
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
             &Deg::new(46.64649),
@@ -671,7 +683,8 @@ mod tests {
     fn test_partial_update_is_required_to_the_right() {
         let buffer_size = 2000;
 
-        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 100);
+        let mut dem_buffer =
+            DemBuffer::new(buffer_size, buffer_size, 1800, 100);
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
             &Deg::new(46.64649),
@@ -744,7 +757,8 @@ mod tests {
     fn test_partial_update_is_required_to_the_left() {
         let buffer_size = 2000;
 
-        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 100);
+        let mut dem_buffer =
+            DemBuffer::new(buffer_size, buffer_size, 1800, 100);
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
             &Deg::new(46.64649),

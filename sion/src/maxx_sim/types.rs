@@ -4,10 +4,6 @@ pub const EARTH_CIRCUMFERENCE_METERS: f32 = 2.0 * PI * EARTH_RADIUS_METERS;
 pub const GRID_UNITS_PER_DEM_CELL_BITS: i32 = 8;
 pub const GRID_UNITS_PER_DEM_CELL: i32 = 1 << GRID_UNITS_PER_DEM_CELL_BITS;
 
-pub const DEM_TILE_SIZE: i32 = 1800;
-pub const DEM_TILE_SIZE_IN_GRID_CELLS: i32 =
-    DEM_TILE_SIZE * GRID_UNITS_PER_DEM_CELL;
-
 #[derive(Clone)]
 pub struct Deg {
     pub value: f32,
@@ -37,20 +33,20 @@ impl GlobalCell {
         GlobalCell { value }
     }
 
-    pub fn from_degrees(value: &Deg) -> GlobalCell {
-        GlobalCell::new((value.value * DEM_TILE_SIZE as f32) as i32)
+    pub fn from_degrees(value: &Deg, dem_tile_size: i32) -> GlobalCell {
+        GlobalCell::new((value.value * dem_tile_size as f32) as i32)
     }
 
-    pub fn to_tile_degrees(&self) -> Deg {
-        Deg::new(self.value as f32 / DEM_TILE_SIZE as f32)
+    pub fn to_tile_degrees(&self, dem_tile_size: i32) -> Deg {
+        Deg::new(self.value as f32 / dem_tile_size as f32)
     }
 
-    pub fn to_local_cell_lon(&self) -> LocalCell {
-        LocalCell::new(self.value % DEM_TILE_SIZE)
+    pub fn to_local_cell_lon(&self, dem_tile_size: i32) -> LocalCell {
+        LocalCell::new(self.value % dem_tile_size)
     }
 
-    pub fn to_local_cell_lat(&self) -> LocalCell {
-        LocalCell::new(DEM_TILE_SIZE - 1 - self.value % DEM_TILE_SIZE)
+    pub fn to_local_cell_lat(&self, dem_tile_size: i32) -> LocalCell {
+        LocalCell::new(dem_tile_size - 1 - self.value % dem_tile_size)
     }
 }
 
@@ -157,8 +153,11 @@ impl Grid {
         Grid { value }
     }
 
-    pub fn from_degrees(value: &Deg) -> Grid {
-        Grid::new((value.value * DEM_TILE_SIZE_IN_GRID_CELLS as f32) as i32)
+    pub fn from_degrees(value: &Deg, dem_tile_size: i32) -> Grid {
+        Grid::new(
+            (value.value * (dem_tile_size * GRID_UNITS_PER_DEM_CELL) as f32)
+                as i32,
+        )
     }
 
     pub fn to_global_cell(&self) -> GlobalCell {
@@ -230,13 +229,14 @@ impl PartialEq for TileKey {
 pub fn calculate_pixel_size_in_grid_units(
     latitude_rad: f32,
     zoom_meters_per_pixel: f32,
+    dem_tile_size: i32,
 ) -> (i32, i32) {
     let latitude_cos = latitude_rad.cos();
     let circumference_at_latitude = EARTH_CIRCUMFERENCE_METERS * latitude_cos;
     let longitude_degree_length_in_meters_at_latitude =
         circumference_at_latitude / 360.0;
     let dem_cell_horiz_length_in_meters_at_latitude =
-        longitude_degree_length_in_meters_at_latitude / DEM_TILE_SIZE as f32;
+        longitude_degree_length_in_meters_at_latitude / dem_tile_size as f32;
     let grid_unit_horiz_length_in_meters_at_latitude =
         dem_cell_horiz_length_in_meters_at_latitude / 256.0;
     let pixel_size_in_meters = zoom_meters_per_pixel;
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_pixel_size() {
         let (horizontal, vertical) =
-            calculate_pixel_size_in_grid_units(0.0, 1.0);
+            calculate_pixel_size_in_grid_units(0.0, 1.0, 1800);
         assert_eq!(horizontal, 4);
         assert_eq!(vertical, 4);
     }
