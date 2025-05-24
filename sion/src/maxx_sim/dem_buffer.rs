@@ -169,9 +169,9 @@ impl DemBuffer {
         let east_edge_distance_in_cells =
             &self.buffer_east_edge - &visible_east_edge;
         let north_edge_distance_in_cells =
-            &visible_north_edge - &self.buffer_north_edge;
+            &self.buffer_north_edge - &visible_north_edge;
         let south_edge_distance_in_cells =
-            &self.buffer_south_edge - &visible_south_edge;
+            &visible_south_edge - &self.buffer_south_edge;
 
         west_edge_distance_in_cells
             < self.min_cell_distance_to_edge_before_refresh
@@ -551,6 +551,150 @@ impl DemBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_test_initial_loading() {
+        let mut dem_buffer = DemBuffer::new(200, 200, 180, 30);
+
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
+        assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
+    }
+
+    #[test]
+    fn new_test_no_update_is_required_if_no_movement() {
+        let visible_area_width = 80;
+        let visible_area_height = 60;
+
+        let mut dem_buffer = DemBuffer::new(200, 200, 180, 30);
+
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        // Simulate an update with no movement
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
+        assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 0);
+    }
+
+    #[test]
+    fn new_test_moved_too_far_so_full_reload_is_needed() {
+        let visible_area_width = 80;
+        let visible_area_height = 60;
+
+        let mut dem_buffer = DemBuffer::new(200, 200, 180, 30);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(
+            &Deg::new(9.0),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
+        assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
+    }
+
+    #[test]
+    fn new_test_partial_update_is_required_to_the_right() {
+        let buffer_size = 200;
+        let visible_area_width = 80;
+        let visible_area_height = 60;
+
+        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 180, 30);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(
+            &Deg::new(8.0),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+        assert_ne!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 2);
+    }
+
+    #[test]
+    fn new_test_partial_update_is_required_to_the_left() {
+        let buffer_size = 200;
+        let visible_area_width = 80;
+        let visible_area_height = 60;
+
+        let mut dem_buffer = DemBuffer::new(buffer_size, buffer_size, 180, 30);
+        dem_buffer.update_map_position(
+            &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        // Simulate a partial update
+        dem_buffer.update_map_position(
+            &Deg::new(7.2),
+            &Deg::new(46.64649),
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(dem_buffer.all_cells_are_set());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+        assert_ne!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
+    }
 
     #[test]
     fn test_initial_loading() {

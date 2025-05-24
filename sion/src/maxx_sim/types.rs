@@ -52,6 +52,7 @@ impl GlobalCell {
 
 use std::cmp::Ordering;
 use std::f32::consts::PI;
+use std::fmt;
 use std::ops::{Add, Sub, SubAssign};
 
 impl PartialEq for GlobalCell {
@@ -71,6 +72,12 @@ impl PartialOrd for GlobalCell {
 impl Ord for GlobalCell {
     fn cmp(&self, other: &Self) -> Ordering {
         self.value.cmp(&other.value)
+    }
+}
+
+impl fmt::Debug for GlobalCell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GlobalCell {{ value: {} }}", self.value)
     }
 }
 
