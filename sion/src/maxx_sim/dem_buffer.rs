@@ -1,5 +1,4 @@
 use crate::maxx_sim::types::{Deg, GlobalCell, LocalCell, TileKey};
-use proptest::prelude::ProptestConfig;
 use std::cmp::{max, min};
 
 pub struct CellKey {
@@ -7,13 +6,18 @@ pub struct CellKey {
 }
 
 impl CellKey {
-    pub fn from_cell_coords(x: GlobalCell, y: GlobalCell) -> Self {
-        let cell_x = x.value;
-        let cell_y = y.value;
-        let value = cell_y * 100000 + cell_x;
-        CellKey {
-            value, // Assuming a unique encoding for the cell
+    pub fn from_cell_coords(x: &GlobalCell, y: &GlobalCell) -> Self {
+        if x.value <= i16::MIN as i32
+            || x.value >= i16::MAX as i32
+            || y.value <= i16::MIN as i32
+            || y.value >= i16::MAX as i32
+        {
+            panic!("Cell coordinates out of bounds");
         }
+
+        let yyy = y.value << 16;
+        let value = yyy | (x.value & 0xFFFF); // Combine x and y into a single i32
+        CellKey { value }
     }
 
     pub fn from_i32(value: i32) -> Self {
@@ -21,9 +25,18 @@ impl CellKey {
     }
 
     pub fn to_cell_coords(&self) -> (GlobalCell, GlobalCell) {
-        let cell_x = self.value % 100000;
-        let cell_y = self.value / 100000;
-        (GlobalCell::new(cell_x), GlobalCell::new(cell_y))
+        let x = ((self.value & 0xFFFF) as i16) as i32; // Extract lower 16 bits for x
+        let y = (((self.value >> 16) & 0xFFFF) as i16) as i32; // Extract upper 16 bits for y
+
+        if x <= i16::MIN as i32
+            || x >= i16::MAX as i32
+            || y <= i16::MIN as i32
+            || y >= i16::MAX as i32
+        {
+            panic!("Cell coordinates out of bounds");
+        }
+
+        (GlobalCell::new(x), GlobalCell::new(y))
     }
 
     pub fn to_i32(&self) -> i32 {
@@ -442,10 +455,10 @@ impl DemBuffer {
             // calculate the tile ID of the current slice
             let tile_lon_deg = slice_west_edge_global_cell
                 .to_tile_degrees(self.dem_tile_size)
-                .to_int();
+                .to_int_floor();
             let tile_lat_deg = slice_north_edge_global_cell
                 .to_tile_degrees(self.dem_tile_size)
-                .to_int();
+                .to_int_floor();
 
             // now we know which tile it is
             let tile_key = TileKey::from_lon_lat(tile_lon_deg, tile_lat_deg);
@@ -517,21 +530,62 @@ impl DemBuffer {
 
         for y in 0..slice.slice_height {
             for x in 0..slice.slice_width {
-                let dem_lon_global_cell =
-                    &lon_global_cell + (slice.slice_tile_x0.value + x);
-                let dem_lat_global_cell = &lat_global_cell
-                    + (self.dem_tile_size
-                        - 1
-                        - (slice.slice_tile_y0.value + y));
+                let tile_x = slice.slice_tile_x0.value + x;
+                if tile_x < 0 || tile_x >= self.dem_tile_size {
+                    panic!("Bug: Tile X coordinate out of bounds: {}", tile_x);
+                }
+
+                let tile_y = slice.slice_tile_y0.value + y;
+                if tile_y < 0 || tile_y >= self.dem_tile_size {
+                    panic!("Bug: Tile Y coordinate out of bounds: {}", tile_y);
+                }
+
+                let dem_lon_global_cell = &lon_global_cell + tile_x;
+                let dem_lat_global_cell =
+                    &lat_global_cell + (self.dem_tile_size - 1 - tile_y);
+
+                let buffer_x = slice.slice_buffer_x0 + x;
+                let buffer_y = slice.slice_buffer_y0 + y;
+
+                if buffer_x == self.buffer_width / 2
+                    && buffer_y == self.buffer_height / 2
+                {
+                    if dem_lon_global_cell != self.center_global_cell_lon
+                        || dem_lat_global_cell != self.center_global_cell_lat
+                    {
+                        panic!(
+                            "Bug: Center cell ({}, {}) does not match loaded DEM cell ({}, {})",
+                            self.center_global_cell_lon.value,
+                            self.center_global_cell_lat.value,
+                            dem_lon_global_cell.value,
+                            dem_lat_global_cell.value
+                        );
+                    }
+                }
 
                 self.set_cell(
-                    slice.slice_buffer_x0 + x,
-                    slice.slice_buffer_y0 + y,
+                    buffer_x,
+                    buffer_y,
                     &CellKey::from_cell_coords(
-                        dem_lon_global_cell,
-                        dem_lat_global_cell,
+                        &dem_lon_global_cell,
+                        &dem_lat_global_cell,
                     ),
                 );
+
+                let control = self.get_cell(
+                    slice.slice_buffer_x0 + x,
+                    slice.slice_buffer_y0 + y,
+                );
+
+                let (cx, cy) = control.to_cell_coords();
+                if cx.value != dem_lon_global_cell.value
+                    || cy.value != dem_lat_global_cell.value
+                {
+                    panic!(
+                        "Bug: Cell ({}, {}) does not match loaded DEM cell ({}, {})",
+                        cx.value, cy.value, dem_lon_global_cell.value, dem_lat_global_cell.value
+                    );
+                }
             }
         }
 
@@ -654,6 +708,8 @@ impl DemBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     #[test]
     fn new_test_initial_loading() {
@@ -820,8 +876,8 @@ mod tests {
     #[test]
     fn test_cell_keys_1() {
         let cell_key = CellKey::from_cell_coords(
-            GlobalCell::new(100),
-            GlobalCell::new(200),
+            &GlobalCell::new(100),
+            &GlobalCell::new(200),
         );
 
         let (tile_lon_cell, tile_lat_cell) = cell_key.to_cell_coords();
@@ -833,123 +889,73 @@ mod tests {
     #[test]
     fn test_cell_keys_2() {
         let cell_key = CellKey::from_cell_coords(
-            GlobalCell::new(-100),
-            GlobalCell::new(-200),
+            &GlobalCell::new(-1239),
+            &GlobalCell::new(195),
         );
 
         let (tile_lon_cell, tile_lat_cell) = cell_key.to_cell_coords();
 
-        assert_eq!(tile_lon_cell.value, -100);
-        assert_eq!(tile_lat_cell.value, -200);
+        assert_eq!(tile_lon_cell.value, -1239);
+        assert_eq!(tile_lat_cell.value, 195);
     }
-}
 
-// use proptest::prelude::*;
-//
-// fn arb_dem_buffer() -> BoxedStrategy<DemBuffer> {
-//     let buffer_size = 200;
-//     let dem_tile_size = 180;
-//     let min_cell_distance_to_edge_before_refresh = 30;
-//
-//     let mut buffer = DemBuffer::new(
-//         buffer_size,
-//         buffer_size,
-//         dem_tile_size,
-//         min_cell_distance_to_edge_before_refresh,
-//     );
-//
-//     let visible_area_width = 80;
-//     let visible_area_height = 60;
-//
-//     let lon = Deg::new(7.65532);
-//     let lat = Deg::new(46.64649);
-//
-//     buffer.update_map_position(
-//         &lon,
-//         &lat,
-//         visible_area_width,
-//         visible_area_height,
-//     );
-//
-//     buffer.boxed()
-// }
-
-// impl Strategy for DemBuffer {
-//     type Value = Self;
-//
-//     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
-//         let buffer_size = 200;
-//         let dem_tile_size = runner.gen_range(180..=360);
-//         let min_cell_distance_to_edge_before_refresh =
-//             runner.gen_range(10..=50);
-//
-//         let buffer = DemBuffer::new(
-//             buffer_size,
-//             buffer_size,
-//             dem_tile_size,
-//             min_cell_distance_to_edge_before_refresh,
-//         );
-//
-//         let visible_area_width = runner.gen_range(50..=200);
-//         let visible_area_height = runner.gen_range(50..=200);
-//
-//         let lon = Deg::new(runner.gen_range(-180.0..=180.0));
-//         let lat = Deg::new(runner.gen_range(-90.0..=90.0));
-//
-//         buffer.update_map_position(
-//             &lon,
-//             &lat,
-//             visible_area_width,
-//             visible_area_height,
-//         )
-//     }
-// }
-
-fn given_dem_buffer(lon_deg: f32, lat_deg: f32) -> DemBuffer {
-    println!("Creating DEM buffer for lon: {}, lat: {}", lon_deg, lat_deg);
-
-    let buffer_size = 200;
-    let dem_tile_size = 180;
-    let min_cell_distance_to_edge_before_refresh = 30;
-
-    let mut buffer = DemBuffer::new(
-        buffer_size,
-        buffer_size,
-        dem_tile_size,
-        min_cell_distance_to_edge_before_refresh,
-    );
-
-    let visible_area_width = 80;
-    let visible_area_height = 60;
-
-    let lon = Deg::new(lon_deg);
-    let lat = Deg::new(lat_deg);
-
-    buffer.update_map_position(
-        &lon,
-        &lat,
-        visible_area_width,
-        visible_area_height,
-    );
-
-    buffer
-}
-
-use proptest::proptest;
-use proptest::sample::select;
-
-proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 1, timeout: 10000, .. ProptestConfig::default()
-    })]
     #[test]
-    fn test_dem_buffer_properties(
-        lon_deg in select(vec![-10.5]),
-        lat_deg in select(vec![-10.5])
-        // lon_deg in select(vec![-10.5, -5.2, 0.0, 2.3, 10.0]),
-        // lat_deg in select(vec![-10.5, -5.2, 0.0, 2.3, 10.0])
-    ) {
-        let dem_buffer = given_dem_buffer(lon_deg, lat_deg);
+    fn test_cell_keys_3() {
+        let cell_key = CellKey::from_cell_coords(
+            &GlobalCell::new(-1419),
+            &GlobalCell::new(-180),
+        );
+
+        let (tile_lon_cell, tile_lat_cell) = cell_key.to_cell_coords();
+
+        assert_eq!(tile_lon_cell.value, -1419);
+        assert_eq!(tile_lat_cell.value, -180);
+    }
+
+    #[test]
+    fn test_properties() {
+        let rnd_seed = 42;
+        let mut rng = StdRng::seed_from_u64(rnd_seed);
+
+        let buffer_size = 200;
+        let dem_tile_size = 180;
+        let min_cell_distance_to_edge_before_refresh = 30;
+
+        let mut dem_buffer = DemBuffer::new(
+            buffer_size,
+            buffer_size,
+            dem_tile_size,
+            min_cell_distance_to_edge_before_refresh,
+        );
+
+        let visible_area_width = 80;
+        let visible_area_height = 60;
+        let lon = Deg::new(rng.random_range(-10.0..10.0));
+        let lat = Deg::new(rng.random_range(-10.0..10.0));
+
+        dem_buffer.update_map_position(
+            &lon,
+            &lat,
+            visible_area_width,
+            visible_area_height,
+        );
+
+        assert!(
+            dem_buffer.prop_center_cell_is_correct_one(),
+            "Center cell is not correct",
+        );
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
+
+        let lon_move = rng.random_range(-2.0..2.0);
+        let lat_move = rng.random_range(-2.0..2.0);
+
+        dem_buffer.update_map_position(
+            &(&lon + lon_move),
+            &(&lat + lat_move),
+            visible_area_width,
+            visible_area_height,
+        );
 
         assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());

@@ -14,12 +14,22 @@ impl Deg {
         Deg { value }
     }
 
-    pub fn to_int(&self) -> i32 {
-        self.value as i32
+    pub fn to_int_floor(&self) -> i32 {
+        self.value.floor() as i32
     }
 
     pub fn to_radians(&self) -> f32 {
         self.value * (PI / 180.0)
+    }
+}
+
+impl Add<f32> for &Deg {
+    type Output = Deg;
+
+    fn add(self, other: f32) -> Deg {
+        Deg {
+            value: self.value + other,
+        }
     }
 }
 
@@ -42,11 +52,20 @@ impl GlobalCell {
     }
 
     pub fn to_local_cell_lon(&self, dem_tile_size: i32) -> LocalCell {
-        LocalCell::new(self.value % dem_tile_size)
+        let m = self.value % dem_tile_size;
+        if m < 0 {
+            LocalCell::new(dem_tile_size + m)
+        } else {
+            LocalCell::new(m)
+        }
     }
 
     pub fn to_local_cell_lat(&self, dem_tile_size: i32) -> LocalCell {
-        LocalCell::new(dem_tile_size - 1 - self.value % dem_tile_size)
+        if self.value < 0 {
+            LocalCell::new(dem_tile_size + self.value % dem_tile_size)
+        } else {
+            LocalCell::new(dem_tile_size - 1 - self.value % dem_tile_size)
+        }
     }
 }
 
@@ -259,6 +278,38 @@ pub fn calculate_pixel_size_in_grid_units(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_to_local_cell_lon_negative_1() {
+        let global_cell = GlobalCell::new(-1);
+        let dem_tile_size = 256;
+        let local_cell = global_cell.to_local_cell_lon(dem_tile_size);
+        assert_eq!(local_cell.value, 255);
+    }
+
+    #[test]
+    fn test_to_local_cell_lon_negative_2() {
+        let global_cell = GlobalCell::new(-10);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lon(dem_tile_size);
+        assert_eq!(local_cell.value, 0);
+    }
+
+    #[test]
+    fn test_to_local_cell_lon_negative_3() {
+        let global_cell = GlobalCell::new(-11);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lon(dem_tile_size);
+        assert_eq!(local_cell.value, 9);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative() {
+        let global_cell = GlobalCell::new(-1);
+        let dem_tile_size = 256;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 255);
+    }
 
     #[test]
     fn test_pixel_size() {
