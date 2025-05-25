@@ -583,6 +583,17 @@ impl DemBuffer {
         self.block_move = None;
     }
 
+    pub fn prop_center_cell_is_correct_one(&self) -> bool {
+        let center_x = self.buffer_width / 2;
+        let center_y = self.buffer_height / 2;
+
+        let center_cell = self.get_cell(center_x, center_y);
+        let (cell_x, cell_y) = center_cell.to_cell_coords();
+
+        cell_x == self.center_global_cell_lon
+            && cell_y == self.center_global_cell_lat
+    }
+
     /// Checks if all cells in the buffer are set (not empty).
     ///
     /// If not all cells are set, it indicates that the buffer update
@@ -661,6 +672,7 @@ mod tests {
             100,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
@@ -684,6 +696,7 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
@@ -695,7 +708,9 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -716,6 +731,7 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
@@ -727,7 +743,9 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
 
@@ -749,6 +767,7 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
@@ -760,7 +779,9 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
         assert_ne!(dem_buffer.block_move, None);
@@ -781,6 +802,7 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
@@ -792,7 +814,9 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
         assert_ne!(dem_buffer.block_move, None);
