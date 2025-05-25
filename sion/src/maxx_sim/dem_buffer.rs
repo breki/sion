@@ -15,8 +15,7 @@ impl CellKey {
             panic!("Cell coordinates out of bounds");
         }
 
-        let yyy = y.value << 16;
-        let value = yyy | (x.value & 0xFFFF); // Combine x and y into a single i32
+        let value = (y.value << 16) | (x.value & 0xFFFF);
         CellKey { value }
     }
 
@@ -519,6 +518,17 @@ impl DemBuffer {
     }
 
     fn load_tile_slice(&mut self, slice: &TileSlice) {
+        println!(
+            "Loading tile slice: {:?}, buffer: ({}, {}), tile: ({}, {}), w: {}, h: {}",
+            slice.tile_key,
+            slice.slice_buffer_x0,
+            slice.slice_buffer_y0,
+            slice.slice_tile_x0.value,
+            slice.slice_tile_y0.value,
+            slice.slice_width,
+            slice.slice_height
+        );
+
         let lon_global_cell = GlobalCell::from_degrees(
             &Deg::new(slice.tile_key.lon as f32),
             self.dem_tile_size,
@@ -547,6 +557,17 @@ impl DemBuffer {
                 let buffer_x = slice.slice_buffer_x0 + x;
                 let buffer_y = slice.slice_buffer_y0 + y;
 
+                if buffer_x == 0 && (buffer_y == 195 || buffer_y == 196) {
+                    println!(
+                        "Buffer ({}, {}) - cell {}, {}, tile_y: {}",
+                        buffer_x,
+                        buffer_y,
+                        dem_lon_global_cell.value,
+                        dem_lat_global_cell.value,
+                        tile_y
+                    );
+                }
+
                 if buffer_x == self.buffer_width / 2
                     && buffer_y == self.buffer_height / 2
                 {
@@ -558,7 +579,7 @@ impl DemBuffer {
                             self.center_global_cell_lon.value,
                             self.center_global_cell_lat.value,
                             dem_lon_global_cell.value,
-                            dem_lat_global_cell.value
+                            dem_lat_global_cell.value,
                         );
                     }
                 }

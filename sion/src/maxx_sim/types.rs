@@ -62,7 +62,11 @@ impl GlobalCell {
 
     pub fn to_local_cell_lat(&self, dem_tile_size: i32) -> LocalCell {
         if self.value < 0 {
-            LocalCell::new(dem_tile_size + self.value % dem_tile_size)
+            let mut a = -1 - self.value % dem_tile_size;
+            if a < 0 {
+                a += dem_tile_size;
+            }
+            LocalCell::new(a)
         } else {
             LocalCell::new(dem_tile_size - 1 - self.value % dem_tile_size)
         }
@@ -304,11 +308,59 @@ mod tests {
     }
 
     #[test]
-    fn test_to_local_cell_lat_negative() {
-        let global_cell = GlobalCell::new(-1);
-        let dem_tile_size = 256;
+    fn test_to_local_cell_lat_positive() {
+        let global_cell = GlobalCell::new(1);
+        let dem_tile_size = 10;
         let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
-        assert_eq!(local_cell.value, 255);
+        assert_eq!(local_cell.value, 8);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_zero() {
+        let global_cell = GlobalCell::new(0);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 9);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative_1() {
+        let global_cell = GlobalCell::new(-1);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 0);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative_2() {
+        let global_cell = GlobalCell::new(-2);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 1);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative_3() {
+        let global_cell = GlobalCell::new(-9);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 8);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative_4() {
+        let global_cell = GlobalCell::new(-10);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 9);
+    }
+
+    #[test]
+    fn test_to_local_cell_lat_negative_5() {
+        let global_cell = GlobalCell::new(-11);
+        let dem_tile_size = 10;
+        let local_cell = global_cell.to_local_cell_lat(dem_tile_size);
+        assert_eq!(local_cell.value, 0);
     }
 
     #[test]
