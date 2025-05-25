@@ -1,4 +1,5 @@
 use crate::maxx_sim::types::{Deg, GlobalCell, LocalCell, TileKey};
+use proptest::prelude::ProptestConfig;
 use std::cmp::{max, min};
 
 pub struct CellKey {
@@ -86,6 +87,7 @@ enum BufferUpdateDecision {
     EntireBufferReloadRequired,
 }
 
+#[derive(Debug)]
 pub struct DemBuffer {
     pub buffer_width: i32,
     pub buffer_height: i32,
@@ -149,8 +151,6 @@ impl DemBuffer {
 
         let mut full_update_needed = self.state == BufferState::Uninitialized;
 
-        println!("full_update_needed: {}", full_update_needed);
-
         if self.state == BufferState::Initialized {
             let update_required = self.is_buffer_update_required(
                 lon,
@@ -158,8 +158,6 @@ impl DemBuffer {
                 visible_area_width,
                 visible_area_height,
             );
-
-            println!("update_required: {}", update_required);
 
             if update_required {
                 let update_decision = self.try_partial_update(lon, lat);
@@ -284,8 +282,6 @@ impl DemBuffer {
 
         // is there actually any intersection?
         if block_width >= 0 && block_height >= 0 {
-            println!("Intersection found!");
-
             // if there is an intersection, we can perform a partial update
             update_decision = BufferUpdateDecision::PartialUpdatePerformed;
 
@@ -321,8 +317,6 @@ impl DemBuffer {
             // now load slices from DEM files
             self.fill_missing_data_after_move();
         } else {
-            println!("No intersection found!");
-
             // if there is no intersection, we need to do a full buffer reload
             update_decision = BufferUpdateDecision::EntireBufferReloadRequired;
         }
@@ -560,7 +554,7 @@ impl DemBuffer {
                 // If the cell is already occupied, this indicates the buffer
                 // update algorithm has a bug. Only empty cells should be
                 // overwritten during the update.
-                println!(
+                panic!(
                     "Bug: Trying to overwrite an already occupied cell at ({}, {})",
                     x, y
                 );
@@ -824,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cell_keys() {
+    fn test_cell_keys_1() {
         let cell_key = CellKey::from_cell_coords(
             GlobalCell::new(100),
             GlobalCell::new(200),
@@ -834,5 +828,131 @@ mod tests {
 
         assert_eq!(tile_lon_cell.value, 100);
         assert_eq!(tile_lat_cell.value, 200);
+    }
+
+    #[test]
+    fn test_cell_keys_2() {
+        let cell_key = CellKey::from_cell_coords(
+            GlobalCell::new(-100),
+            GlobalCell::new(-200),
+        );
+
+        let (tile_lon_cell, tile_lat_cell) = cell_key.to_cell_coords();
+
+        assert_eq!(tile_lon_cell.value, -100);
+        assert_eq!(tile_lat_cell.value, -200);
+    }
+}
+
+// use proptest::prelude::*;
+//
+// fn arb_dem_buffer() -> BoxedStrategy<DemBuffer> {
+//     let buffer_size = 200;
+//     let dem_tile_size = 180;
+//     let min_cell_distance_to_edge_before_refresh = 30;
+//
+//     let mut buffer = DemBuffer::new(
+//         buffer_size,
+//         buffer_size,
+//         dem_tile_size,
+//         min_cell_distance_to_edge_before_refresh,
+//     );
+//
+//     let visible_area_width = 80;
+//     let visible_area_height = 60;
+//
+//     let lon = Deg::new(7.65532);
+//     let lat = Deg::new(46.64649);
+//
+//     buffer.update_map_position(
+//         &lon,
+//         &lat,
+//         visible_area_width,
+//         visible_area_height,
+//     );
+//
+//     buffer.boxed()
+// }
+
+// impl Strategy for DemBuffer {
+//     type Value = Self;
+//
+//     fn new_tree(&self, runner: &mut TestRunner) -> NewTree<Self> {
+//         let buffer_size = 200;
+//         let dem_tile_size = runner.gen_range(180..=360);
+//         let min_cell_distance_to_edge_before_refresh =
+//             runner.gen_range(10..=50);
+//
+//         let buffer = DemBuffer::new(
+//             buffer_size,
+//             buffer_size,
+//             dem_tile_size,
+//             min_cell_distance_to_edge_before_refresh,
+//         );
+//
+//         let visible_area_width = runner.gen_range(50..=200);
+//         let visible_area_height = runner.gen_range(50..=200);
+//
+//         let lon = Deg::new(runner.gen_range(-180.0..=180.0));
+//         let lat = Deg::new(runner.gen_range(-90.0..=90.0));
+//
+//         buffer.update_map_position(
+//             &lon,
+//             &lat,
+//             visible_area_width,
+//             visible_area_height,
+//         )
+//     }
+// }
+
+fn given_dem_buffer(lon_deg: f32, lat_deg: f32) -> DemBuffer {
+    println!("Creating DEM buffer for lon: {}, lat: {}", lon_deg, lat_deg);
+
+    let buffer_size = 200;
+    let dem_tile_size = 180;
+    let min_cell_distance_to_edge_before_refresh = 30;
+
+    let mut buffer = DemBuffer::new(
+        buffer_size,
+        buffer_size,
+        dem_tile_size,
+        min_cell_distance_to_edge_before_refresh,
+    );
+
+    let visible_area_width = 80;
+    let visible_area_height = 60;
+
+    let lon = Deg::new(lon_deg);
+    let lat = Deg::new(lat_deg);
+
+    buffer.update_map_position(
+        &lon,
+        &lat,
+        visible_area_width,
+        visible_area_height,
+    );
+
+    buffer
+}
+
+use proptest::proptest;
+use proptest::sample::select;
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 1, timeout: 10000, .. ProptestConfig::default()
+    })]
+    #[test]
+    fn test_dem_buffer_properties(
+        lon_deg in select(vec![-10.5]),
+        lat_deg in select(vec![-10.5])
+        // lon_deg in select(vec![-10.5, -5.2, 0.0, 2.3, 10.0]),
+        // lat_deg in select(vec![-10.5, -5.2, 0.0, 2.3, 10.0])
+    ) {
+        let dem_buffer = given_dem_buffer(lon_deg, lat_deg);
+
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
     }
 }
