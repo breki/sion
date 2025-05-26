@@ -686,17 +686,26 @@ impl DemBuffer {
                 let (east_neighbor_x, east_neighbor_y) =
                     east_neighbor.to_cell_coords();
 
-                if east_neighbor_x.value != cell_x.value + 1
+                let mut expected_east_neighbor_cell_x = cell_x.value + 1;
+                if expected_east_neighbor_cell_x
+                    >= 180 * self.dem_tile_size
+                {
+                    expected_east_neighbor_cell_x -= 360 * self.dem_tile_size;
+                }
+
+                if east_neighbor_x.value != expected_east_neighbor_cell_x
                     || east_neighbor_y.value != cell_y.value
                 {
                     println!(
-                        "{}, {}: ({}, {}) >> ({}, {})",
+                        "{}, {}: ({}, {}) >> ({}, {}), expected: ({}, {})",
                         x,
                         y,
                         cell_x.value,
                         cell_y.value,
                         east_neighbor_x.value,
-                        east_neighbor_y.value
+                        east_neighbor_y.value,
+                        expected_east_neighbor_cell_x,
+                        cell_y.value
                     );
                     return false; // East neighbor is not a good neighbor
                 }
@@ -738,6 +747,27 @@ mod tests {
 
         dem_buffer.update_map_position(
             &Deg::new(7.65532),
+            &Deg::new(46.64649),
+            200,
+            100,
+        );
+
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
+        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_all_cells_are_good_neighbors());
+
+        assert_eq!(dem_buffer.state, BufferState::Initialized);
+
+        assert_eq!(dem_buffer.block_move, None);
+        assert_eq!(dem_buffer.slices_loaded.len(), 4);
+    }
+
+    #[test]
+    fn test_handling_dateline() {
+        let mut dem_buffer = DemBuffer::new(200, 200, 180, 30);
+
+        dem_buffer.update_map_position(
+            &Deg::new(179.9),
             &Deg::new(46.64649),
             200,
             100,

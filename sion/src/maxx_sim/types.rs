@@ -1,3 +1,8 @@
+use std::cmp::Ordering;
+use std::f32::consts::PI;
+use std::fmt;
+use std::ops::{Add, Sub, SubAssign};
+
 pub const EARTH_RADIUS_METERS: f32 = 6378137.0;
 pub const EARTH_CIRCUMFERENCE_METERS: f32 = 2.0 * PI * EARTH_RADIUS_METERS;
 
@@ -11,6 +16,10 @@ pub struct Deg {
 
 impl Deg {
     pub fn new(value: f32) -> Deg {
+        if !(value > -181.0 && value < 180.0) {
+            panic!("Invalid degree value: {}", value);
+        }
+
         Deg { value }
     }
 
@@ -48,7 +57,14 @@ impl GlobalCell {
     }
 
     pub fn to_tile_degrees(&self, dem_tile_size: i32) -> Deg {
-        Deg::new(self.value as f32 / dem_tile_size as f32)
+        let degrees = self.value as f32 / dem_tile_size as f32;
+        if degrees <= -181.0 {
+            Deg::new(degrees + 360.0)
+        } else if degrees >= 180.0 {
+            Deg::new(degrees - 360.0)
+        } else {
+            Deg::new(degrees)
+        }
     }
 
     pub fn to_local_cell_lon(&self, dem_tile_size: i32) -> LocalCell {
@@ -72,11 +88,6 @@ impl GlobalCell {
         }
     }
 }
-
-use std::cmp::Ordering;
-use std::f32::consts::PI;
-use std::fmt;
-use std::ops::{Add, Sub, SubAssign};
 
 impl PartialEq for GlobalCell {
     fn eq(&self, other: &Self) -> bool {
