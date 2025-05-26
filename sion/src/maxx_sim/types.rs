@@ -56,6 +56,20 @@ impl GlobalCell {
         GlobalCell::new((value.value * dem_tile_size as f32) as i32)
     }
 
+    pub fn from_local_cell_lat(
+        lat: &Deg,
+        cell_y: LocalCell,
+        dem_tile_size: i32,
+    ) -> GlobalCell {
+        if cell_y.value < 0 || cell_y.value >= dem_tile_size {
+            panic!("Invalid local cell Y value: {}", cell_y.value);
+        }
+
+        let mut value = (lat.value * dem_tile_size as f32) as i32;
+        value += dem_tile_size - 1 - cell_y.value;
+        GlobalCell::new(value)
+    }
+
     pub fn to_tile_degrees(&self, dem_tile_size: i32) -> Deg {
         let degrees = self.value as f32 / dem_tile_size as f32;
         if degrees <= -181.0 {
@@ -181,6 +195,16 @@ impl LocalCell {
 impl PartialEq for LocalCell {
     fn eq(&self, other: &Self) -> bool {
         self.value == other.value
+    }
+}
+
+impl Add<i32> for &LocalCell {
+    type Output = LocalCell;
+
+    fn add(self, other: i32) -> LocalCell {
+        LocalCell {
+            value: self.value + other,
+        }
     }
 }
 
@@ -380,5 +404,82 @@ mod tests {
             calculate_pixel_size_in_grid_units(0.0, 1.0, 1800);
         assert_eq!(horizontal, 4);
         assert_eq!(vertical, 4);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_1() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(0.0),
+            LocalCell::new(1799),
+            1800,
+        );
+
+        assert_eq!(g.value, 0);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_2() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(0.0),
+            LocalCell::new(0),
+            1800,
+        );
+
+        assert_eq!(g.value, 1799);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_3() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(1.0),
+            LocalCell::new(1799),
+            1800,
+        );
+
+        assert_eq!(g.value, 1800);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_4() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(-1.0),
+            LocalCell::new(0),
+            1800,
+        );
+
+        assert_eq!(g.value, -1);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_5() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(-1.0),
+            LocalCell::new(1799),
+            1800,
+        );
+
+        assert_eq!(g.value, -1800);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_6() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(-2.0),
+            LocalCell::new(0),
+            1800,
+        );
+
+        assert_eq!(g.value, -1801);
+    }
+
+    #[test]
+    fn test_from_local_cell_lat_7() {
+        let g = GlobalCell::from_local_cell_lat(
+            &Deg::new(0.0),
+            LocalCell::new(22),
+            157,
+        );
+
+        assert_eq!(g.value, 1777);
     }
 }

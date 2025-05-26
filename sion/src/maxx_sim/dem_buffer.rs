@@ -159,6 +159,11 @@ impl DemBuffer {
         visible_area_width: i32,
         visible_area_height: i32,
     ) {
+        println!(
+            "Updating map position to lon: {}, lat: {}, visible area: {}x{}",
+            lon.value, lat.value, visible_area_width, visible_area_height
+        );
+
         self.clear_update_log();
 
         let mut full_update_needed = self.state == BufferState::Uninitialized;
@@ -345,6 +350,11 @@ impl DemBuffer {
         dest_x0: i32,
         dest_y0: i32,
     ) {
+        println!(
+            "Moving DEM block from ({}, {}) to ({}, {}), size: {}x{}",
+            source_x0, source_y0, dest_x0, dest_y0, block_width, block_height
+        );
+
         // The move is simulated in a such a way as to copy the block of data
         // from the source position to the destination position, and clear
         // all the remaining cells in the buffer. This is to ensure
@@ -392,36 +402,82 @@ impl DemBuffer {
     }
 
     fn fill_missing_data_after_move(&mut self) {
-        match self.block_move {
+        let block_move = self.block_move.clone();
+
+        match block_move {
             Some(ref block_move) => {
                 // todo 6: now cover all the possible cases of missing areas
 
-                let missing_area_x;
-                let missing_area_y;
-                let missing_area_width;
-                let missing_area_height;
-
                 // Calculate the missing area based on the block move
                 if block_move.dest_x0 == 0 {
-                    missing_area_x = block_move.block_width;
-                    missing_area_y = 0;
-                    missing_area_width =
-                        self.buffer_width - block_move.block_width;
-                    missing_area_height = self.buffer_height;
-                } else {
-                    missing_area_x = 0;
-                    missing_area_y = 0;
-                    missing_area_width = block_move.dest_x0;
-                    missing_area_height = self.buffer_height;
-                }
+                    if block_move.dest_y0 == 0 {
+                        // v
+                        self.update_buffer_area(
+                            block_move.block_width,
+                            0,
+                            self.buffer_width - block_move.block_width,
+                            block_move.block_height,
+                        );
 
-                // Update the buffer area with the missing area
-                self.update_buffer_area(
-                    missing_area_x,
-                    missing_area_y,
-                    missing_area_width,
-                    missing_area_height,
-                );
+                        // h
+                        self.update_buffer_area(
+                            0,
+                            block_move.block_height,
+                            self.buffer_width,
+                            self.buffer_height - block_move.block_height,
+                        );
+                    } else {
+                        // h
+                        self.update_buffer_area(
+                            0,
+                            0,
+                            self.buffer_width,
+                            block_move.dest_y0,
+                        );
+
+                        // v
+                        self.update_buffer_area(
+                            block_move.block_width,
+                            block_move.dest_y0,
+                            self.buffer_width - block_move.block_width,
+                            block_move.block_height,
+                        );
+                    }
+                } else {
+                    if block_move.dest_y0 == 0 {
+                        // v
+                        self.update_buffer_area(
+                            0,
+                            0,
+                            block_move.dest_x0,
+                            block_move.block_height,
+                        );
+
+                        // h
+                        self.update_buffer_area(
+                            0,
+                            block_move.block_height,
+                            self.buffer_width,
+                            self.buffer_height - block_move.block_height,
+                        );
+                    } else {
+                        // h
+                        self.update_buffer_area(
+                            0,
+                            0,
+                            self.buffer_width,
+                            block_move.dest_y0,
+                        );
+
+                        // v
+                        self.update_buffer_area(
+                            0,
+                            block_move.dest_y0,
+                            block_move.dest_x0,
+                            block_move.block_height,
+                        );
+                    }
+                }
             }
             None => {
                 panic!("No block move found, this method should not be called in this case.");
@@ -436,13 +492,27 @@ impl DemBuffer {
         area_width: i32,
         area_height: i32,
     ) {
+        if area_width < 0 || area_height < 0 {
+            panic!("Area width and height must be non-negative.");
+        }
+
+        if area_width == 0 || area_height == 0 {
+            // No area to update, return early
+            return;
+        }
+
+        println!(
+            "Updating buffer area: ({}, {}), width: {}, height: {}",
+            area_x, area_y, area_width, area_height
+        );
+
         // the global cell coordinates of the left (west) edge of the buffer
         let area_west_edge_global_cell = &self.buffer_west_edge + area_x;
 
         // the top-left corner of the tile slice in the buffer coordinates
         let mut slice_west_edge_global_cell =
             area_west_edge_global_cell.clone();
-        let mut slice_north_edge_global_cell = self.buffer_north_edge.clone();
+        let mut slice_north_edge_global_cell = &self.buffer_north_edge - area_y;
 
         // the buffer coordinates of the top-left corner of the tile slice
         let mut slice_buffer_x0 = area_x;
@@ -533,10 +603,6 @@ impl DemBuffer {
             &Deg::new(slice.tile_key.lon as f32),
             self.dem_tile_size,
         );
-        let lat_global_cell = GlobalCell::from_degrees(
-            &Deg::new(slice.tile_key.lat as f32),
-            self.dem_tile_size,
-        );
 
         for y in 0..slice.slice_height {
             for x in 0..slice.slice_width {
@@ -545,28 +611,23 @@ impl DemBuffer {
                     panic!("Bug: Tile X coordinate out of bounds: {}", tile_x);
                 }
 
-                let tile_y = slice.slice_tile_y0.value + y;
-                if tile_y < 0 || tile_y >= self.dem_tile_size {
-                    panic!("Bug: Tile Y coordinate out of bounds: {}", tile_y);
+                let tile_y = &(slice.slice_tile_y0) + y;
+                if tile_y.value < 0 || tile_y.value >= self.dem_tile_size {
+                    panic!(
+                        "Bug: Tile Y coordinate out of bounds: {}",
+                        tile_y.value
+                    );
                 }
 
                 let dem_lon_global_cell = &lon_global_cell + tile_x;
-                let dem_lat_global_cell =
-                    &lat_global_cell + (self.dem_tile_size - 1 - tile_y);
+                let dem_lat_global_cell = GlobalCell::from_local_cell_lat(
+                    &Deg::new(slice.tile_key.lat as f32),
+                    tile_y,
+                    self.dem_tile_size,
+                );
 
                 let buffer_x = slice.slice_buffer_x0 + x;
                 let buffer_y = slice.slice_buffer_y0 + y;
-
-                if buffer_x == 0 && (buffer_y == 195 || buffer_y == 196) {
-                    println!(
-                        "Buffer ({}, {}) - cell {}, {}, tile_y: {}",
-                        buffer_x,
-                        buffer_y,
-                        dem_lon_global_cell.value,
-                        dem_lat_global_cell.value,
-                        tile_y
-                    );
-                }
 
                 if buffer_x == self.buffer_width / 2
                     && buffer_y == self.buffer_height / 2
@@ -659,8 +720,20 @@ impl DemBuffer {
         let center_cell = self.get_cell(center_x, center_y);
         let (cell_x, cell_y) = center_cell.to_cell_coords();
 
-        cell_x == self.center_global_cell_lon
-            && cell_y == self.center_global_cell_lat
+        let is_correct = cell_x == self.center_global_cell_lon
+            && cell_y == self.center_global_cell_lat;
+
+        if !is_correct {
+            println!(
+                "Center cell ({}, {}) does not match expected center ({}, {})",
+                cell_x.value,
+                cell_y.value,
+                self.center_global_cell_lon.value,
+                self.center_global_cell_lat.value
+            );
+        }
+
+        is_correct
     }
 
     /// Checks if all cells in the buffer are set (not empty).
@@ -668,9 +741,13 @@ impl DemBuffer {
     /// If not all cells are set, it indicates that the buffer update
     /// algorithm has a bug, as it did not cover all the buffer.
     pub fn prop_all_cells_are_set(&self) -> bool {
-        for cell in self.data.iter() {
-            if *cell == 0 {
-                return false; // Found an empty cell
+        for y in 0..self.buffer_height - 1 {
+            for x in 0..self.buffer_width - 1 {
+                let cell = self.get_cell(x, y);
+                if cell.to_i32() == 0 {
+                    println!("Cell at ({}, {}) is not set", x, y,);
+                    return false; // Found an empty cell
+                }
             }
         }
         true // All cells are set
@@ -750,8 +827,8 @@ mod tests {
             100,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -771,8 +848,8 @@ mod tests {
             100,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -795,8 +872,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate an update with no movement
@@ -807,8 +884,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -830,8 +907,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
@@ -842,8 +919,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -866,8 +943,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
@@ -878,8 +955,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -901,8 +978,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         // Simulate a partial update
@@ -913,8 +990,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         assert_eq!(dem_buffer.state, BufferState::Initialized);
@@ -989,11 +1066,11 @@ mod tests {
             visible_area_height,
         );
 
+        assert!(dem_buffer.prop_all_cells_are_set());
         assert!(
             dem_buffer.prop_center_cell_is_correct_one(),
             "Center cell is not correct",
         );
-        assert!(dem_buffer.prop_all_cells_are_set());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
         let lon_move = rng.random_range(-2.0..2.0);
@@ -1006,8 +1083,8 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
     }
 }
