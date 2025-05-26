@@ -687,9 +687,7 @@ impl DemBuffer {
                     east_neighbor.to_cell_coords();
 
                 let mut expected_east_neighbor_cell_x = cell_x.value + 1;
-                if expected_east_neighbor_cell_x
-                    >= 180 * self.dem_tile_size
-                {
+                if expected_east_neighbor_cell_x >= 180 * self.dem_tile_size {
                     expected_east_neighbor_cell_x -= 360 * self.dem_tile_size;
                 }
 
@@ -742,7 +740,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
 
     #[test]
-    fn new_test_initial_loading() {
+    fn test_initial_loading() {
         let mut dem_buffer = DemBuffer::new(200, 200, 180, 30);
 
         dem_buffer.update_map_position(
@@ -784,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    fn new_test_no_update_is_required_if_no_movement() {
+    fn test_no_update_is_required_if_no_movement() {
         let visible_area_width = 80;
         let visible_area_height = 60;
 
@@ -820,7 +818,7 @@ mod tests {
     }
 
     #[test]
-    fn new_test_moved_too_far_so_full_reload_is_needed() {
+    fn test_moved_too_far_so_full_reload_is_needed() {
         let visible_area_width = 80;
         let visible_area_height = 60;
 
@@ -855,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn new_test_partial_update_is_required_to_the_right() {
+    fn test_partial_update_is_required_to_the_right() {
         let buffer_size = 200;
         let visible_area_width = 80;
         let visible_area_height = 60;
@@ -890,7 +888,7 @@ mod tests {
     }
 
     #[test]
-    fn new_test_partial_update_is_required_to_the_left() {
+    fn test_partial_update_is_required_to_the_left() {
         let buffer_size = 200;
         let visible_area_width = 80;
         let visible_area_height = 60;
