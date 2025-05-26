@@ -41,6 +41,10 @@ impl CellKey {
     pub fn to_i32(&self) -> i32 {
         self.value
     }
+
+    pub fn empty() -> Self {
+        CellKey { value: i32::MIN }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -567,7 +571,7 @@ impl DemBuffer {
             slice_west_edge_global_cell =
                 &slice_west_edge_global_cell + slice_width;
 
-            if slice_buffer_x0 >= area_width {
+            if slice_buffer_x0 >= area_x + area_width {
                 // if we reached the right edge of the area...
 
                 // "carriage return" to the left edge of the area...
@@ -579,7 +583,7 @@ impl DemBuffer {
                 slice_buffer_y0 += slice_height;
                 slice_north_edge_global_cell -= slice_height;
 
-                if slice_buffer_y0 >= area_height {
+                if slice_buffer_y0 >= area_y + area_height {
                     // if we reached the bottom edge of the buffer, we are done
                     next_slice_available = false;
                 }
@@ -645,19 +649,14 @@ impl DemBuffer {
                     }
                 }
 
-                self.set_cell(
-                    buffer_x,
-                    buffer_y,
-                    &CellKey::from_cell_coords(
-                        &dem_lon_global_cell,
-                        &dem_lat_global_cell,
-                    ),
+                let cell_key = CellKey::from_cell_coords(
+                    &dem_lon_global_cell,
+                    &dem_lat_global_cell,
                 );
 
-                let control = self.get_cell(
-                    slice.slice_buffer_x0 + x,
-                    slice.slice_buffer_y0 + y,
-                );
+                self.set_cell(buffer_x, buffer_y, &cell_key);
+
+                let control = self.get_cell(buffer_x, buffer_y);
 
                 let (cx, cy) = control.to_cell_coords();
                 if cx.value != dem_lon_global_cell.value
@@ -686,7 +685,7 @@ impl DemBuffer {
     fn set_cell(&mut self, x: i32, y: i32, value: &CellKey) {
         let index = (y * self.buffer_width + x) as usize;
         if index < self.data.len() {
-            if self.data[index] != 0 {
+            if self.data[index] != CellKey::empty().to_i32() {
                 // If the cell is already occupied, this indicates the buffer
                 // update algorithm has a bug. Only empty cells should be
                 // overwritten during the update.
@@ -704,7 +703,7 @@ impl DemBuffer {
 
     fn clear_data(&mut self) {
         for cell in self.data.iter_mut() {
-            *cell = 0;
+            *cell = CellKey::empty().to_i32();
         }
     }
 
@@ -744,7 +743,7 @@ impl DemBuffer {
         for y in 0..self.buffer_height - 1 {
             for x in 0..self.buffer_width - 1 {
                 let cell = self.get_cell(x, y);
-                if cell.to_i32() == 0 {
+                if cell.to_i32() == CellKey::empty().to_i32() {
                     println!("Cell at ({}, {}) is not set", x, y,);
                     return false; // Found an empty cell
                 }
@@ -1039,13 +1038,12 @@ mod tests {
     }
 
     #[test]
-    fn test_properties() {
-        let rnd_seed = 42;
-        let mut rng = StdRng::seed_from_u64(rnd_seed);
-
+    fn test_failing_sample() {
         let buffer_size = 200;
         let dem_tile_size = 180;
         let min_cell_distance_to_edge_before_refresh = 30;
+
+        println!("New round...");
 
         let mut dem_buffer = DemBuffer::new(
             buffer_size,
@@ -1056,8 +1054,8 @@ mod tests {
 
         let visible_area_width = 80;
         let visible_area_height = 60;
-        let lon = Deg::new(rng.random_range(-10.0..10.0));
-        let lat = Deg::new(rng.random_range(-10.0..10.0));
+        let lon = Deg::new(0.3082199);
+        let lat = Deg::new(0.35221577);
 
         dem_buffer.update_map_position(
             &lon,
@@ -1073,8 +1071,8 @@ mod tests {
         );
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
 
-        let lon_move = rng.random_range(-2.0..2.0);
-        let lat_move = rng.random_range(-2.0..2.0);
+        let lon_move = 0.46969604;
+        let lat_move = -0.34017277;
 
         dem_buffer.update_map_position(
             &(&lon + lon_move),
@@ -1083,8 +1081,73 @@ mod tests {
             visible_area_height,
         );
 
-        assert!(dem_buffer.prop_all_cells_are_set());
+        assert!(
+            dem_buffer.prop_all_cells_are_set(),
+            "All cells should be set after update (lon: {} + {}, lat: {} + {})",
+            lon.value,
+            lon_move,
+            lat.value,
+            lat_move
+        );
         assert!(dem_buffer.prop_center_cell_is_correct_one());
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
+    }
+
+    #[test]
+    fn test_properties() {
+        let rnd_seed = 42;
+        let mut rng = StdRng::seed_from_u64(rnd_seed);
+
+        let buffer_size = 200;
+        let dem_tile_size = 180;
+        let min_cell_distance_to_edge_before_refresh = 30;
+
+        for _ in 0..500 {
+            println!("New round...");
+
+            let mut dem_buffer = DemBuffer::new(
+                buffer_size,
+                buffer_size,
+                dem_tile_size,
+                min_cell_distance_to_edge_before_refresh,
+            );
+
+            let visible_area_width = 80;
+            let visible_area_height = 60;
+            let lon = Deg::new(rng.random_range(-10.0..10.0));
+            let lat = Deg::new(rng.random_range(-10.0..10.0));
+
+            dem_buffer.update_map_position(
+                &lon,
+                &lat,
+                visible_area_width,
+                visible_area_height,
+            );
+
+            assert!(dem_buffer.prop_all_cells_are_set());
+            assert!(
+                dem_buffer.prop_center_cell_is_correct_one(),
+                "Center cell is not correct",
+            );
+            assert!(dem_buffer.prop_all_cells_are_good_neighbors());
+
+            let lon_move = rng.random_range(-2.0..2.0);
+            let lat_move = rng.random_range(-2.0..2.0);
+
+            dem_buffer.update_map_position(
+                &(&lon + lon_move),
+                &(&lat + lat_move),
+                visible_area_width,
+                visible_area_height,
+            );
+
+            assert!(
+                dem_buffer.prop_all_cells_are_set(),
+                "All cells should be set after update (lon: {} + {}, lat: {} + {})",
+                lon.value, lon_move, lat.value, lat_move
+            );
+            assert!(dem_buffer.prop_center_cell_is_correct_one());
+            assert!(dem_buffer.prop_all_cells_are_good_neighbors());
+        }
     }
 }
