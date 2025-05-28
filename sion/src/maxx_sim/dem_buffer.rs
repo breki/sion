@@ -410,8 +410,6 @@ impl DemBuffer {
 
         match block_move {
             Some(ref block_move) => {
-                // todo 6: now cover all the possible cases of missing areas
-
                 // Calculate the missing area based on the block move
                 if block_move.dest_x0 == 0 {
                     if block_move.dest_y0 == 0 {
@@ -571,7 +569,7 @@ impl DemBuffer {
             slice_west_edge_global_cell =
                 &slice_west_edge_global_cell + slice_width;
 
-            if slice_buffer_x0 >= area_x + area_width {
+            if slice_buffer_x0 >= area_x1 {
                 // if we reached the right edge of the area...
 
                 // "carriage return" to the left edge of the area...
@@ -583,8 +581,8 @@ impl DemBuffer {
                 slice_buffer_y0 += slice_height;
                 slice_north_edge_global_cell -= slice_height;
 
-                if slice_buffer_y0 >= area_y + area_height {
-                    // if we reached the bottom edge of the buffer, we are done
+                if slice_buffer_y0 >= area_y1 {
+                    // if we reached the bottom edge of the area, we are done
                     next_slice_available = false;
                 }
             }
