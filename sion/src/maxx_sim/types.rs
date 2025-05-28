@@ -42,6 +42,15 @@ impl Add<f32> for &Deg {
     }
 }
 
+impl Sub<f32> for &Deg {
+    type Output = Deg;
+    fn sub(self, other: f32) -> Deg {
+        Deg {
+            value: self.value - other,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GlobalCell {
     pub value: i32,
