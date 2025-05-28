@@ -3,8 +3,8 @@ use std::f32::consts::PI;
 use std::fmt;
 use std::ops::{Add, Sub, SubAssign};
 
-pub const EARTH_RADIUS_METERS: f32 = 6378137.0;
-pub const EARTH_CIRCUMFERENCE_METERS: f32 = 2.0 * PI * EARTH_RADIUS_METERS;
+const EARTH_RADIUS_METERS: f32 = 6378137.0;
+const EARTH_CIRCUMFERENCE_METERS: f32 = 2.0 * PI * EARTH_RADIUS_METERS;
 
 pub const GRID_UNITS_PER_DEM_CELL_BITS: i32 = 8;
 pub const GRID_UNITS_PER_DEM_CELL: i32 = 1 << GRID_UNITS_PER_DEM_CELL_BITS;

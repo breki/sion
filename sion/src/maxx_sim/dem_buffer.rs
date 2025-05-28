@@ -1056,4 +1056,57 @@ mod tests {
         );
         assert!(dem_buffer.prop_all_cells_are_good_neighbors());
     }
+
+    mod properties {
+        use crate::maxx_sim::dem_buffer::DemBuffer;
+        use crate::maxx_sim::types::Deg;
+
+        fn given_dem_buffer(lon_deg: f32, lat_deg: f32) -> DemBuffer {
+            println!(
+                "Creating DEM buffer for lon: {}, lat: {}",
+                lon_deg, lat_deg
+            );
+
+            let buffer_size = 200;
+            let dem_tile_size = 180;
+            let min_cell_distance_to_edge_before_refresh = 30;
+
+            let mut buffer = DemBuffer::new(
+                buffer_size,
+                buffer_size,
+                dem_tile_size,
+                min_cell_distance_to_edge_before_refresh,
+            );
+
+            let visible_area_width = 80;
+            let visible_area_height = 60;
+
+            let lon = Deg::new(lon_deg);
+            let lat = Deg::new(lat_deg);
+
+            buffer.update_map_position(
+                &lon,
+                &lat,
+                visible_area_width,
+                visible_area_height,
+            );
+
+            buffer
+        }
+
+        use crate::maxx_sim::dem_buffer::tests::assert_dem_buffer_properties;
+        use proptest::proptest;
+        use proptest::sample::select;
+
+        proptest! {
+            #[test]
+            fn test_dem_buffer_properties(
+                lon_deg in select(vec![-180.9, -10.5, -5.2, 0.0, 2.3, 10.0, 179.9]),
+                lat_deg in select(vec![-10.5, -5.2, 0.0, 2.3, 10.0])
+            ) {
+                let dem_buffer = given_dem_buffer(lon_deg, lat_deg);
+                assert_dem_buffer_properties(&dem_buffer, None);
+            }
+        }
+    }
 }
